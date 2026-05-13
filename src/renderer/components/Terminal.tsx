@@ -63,18 +63,19 @@ interface TerminalProps {
   onSelectTab: (id: string) => void;
   onCloseTab: (id: string) => void;
   theme: 'dark' | 'light';
-  glassOpacity: number;
+  terminalOpacity: number;
+  terminalFontSize: number;
+  terminalCursorBlink: boolean;
 }
 
 type TerminalStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 type ToolView = 'terminal' | 'sftp' | 'forward';
 
-function getTerminalTheme(theme: 'dark' | 'light', glassOpacity: number) {
-  const darkTerminalAlpha = Math.max(0.08, Math.min(0.95, 0.7 * glassOpacity)).toFixed(3);
-  const lightTerminalAlpha = Math.max(0.08, Math.min(0.95, 0.78 * glassOpacity)).toFixed(3);
+function getTerminalTheme(theme: 'dark' | 'light', terminalOpacity: number) {
+  const terminalAlpha = Math.max(0.45, Math.min(0.95, terminalOpacity)).toFixed(3);
 
   return theme === 'dark' ? {
-    background: `rgba(3, 7, 12, ${darkTerminalAlpha})`,
+    background: `rgba(3, 7, 12, ${terminalAlpha})`,
     foreground: '#e6edf3',
     cursor: '#58a6ff',
     cursorAccent: '#0d1117',
@@ -96,7 +97,7 @@ function getTerminalTheme(theme: 'dark' | 'light', glassOpacity: number) {
     brightCyan: '#56d4dd',
     brightWhite: '#f0f6fc',
   } : {
-    background: `rgba(255, 255, 255, ${lightTerminalAlpha})`,
+    background: `rgba(255, 255, 255, ${terminalAlpha})`,
     foreground: '#1f2328',
     cursor: '#0969da',
     cursorAccent: '#ffffff',
@@ -126,7 +127,9 @@ export function Terminal({
   onSelectTab,
   onCloseTab,
   theme,
-  glassOpacity,
+  terminalOpacity,
+  terminalFontSize,
+  terminalCursorBlink,
 }: TerminalProps): React.ReactElement {
   const [statuses, setStatuses] = useState<Record<string, TerminalStatus>>({});
   const [activeView, setActiveView] = useState<ToolView>('terminal');
@@ -194,7 +197,9 @@ export function Terminal({
             connection={tab.connection}
             active={activeView === 'terminal' && tab.connection.id === activeTabId}
             theme={theme}
-            glassOpacity={glassOpacity}
+            terminalOpacity={terminalOpacity}
+            terminalFontSize={terminalFontSize}
+            terminalCursorBlink={terminalCursorBlink}
             onStatusChange={handleStatusChange}
           />
         ))}
@@ -207,17 +212,17 @@ export function Terminal({
           display: flex;
           flex-direction: column;
           height: 100%;
-          background: var(--terminal-panel-bg);
-          backdrop-filter: blur(28px) saturate(1.45);
-          -webkit-backdrop-filter: blur(28px) saturate(1.45);
+          background: transparent;
         }
 
         .tab-bar {
           display: flex;
-          background: var(--chrome-bg);
+          background: rgba(var(--acrylic-tint-rgb), var(--acrylic-opacity));
           border-bottom: 1px solid var(--border-color);
           overflow-x: auto;
           flex-shrink: 0;
+          backdrop-filter: blur(var(--acrylic-blur)) saturate(var(--acrylic-saturation));
+          -webkit-backdrop-filter: blur(var(--acrylic-blur)) saturate(var(--acrylic-saturation));
           -webkit-app-region: no-drag;
         }
 
@@ -228,7 +233,9 @@ export function Terminal({
           gap: 6px;
           padding: 8px 12px;
           border-bottom: 1px solid var(--border-color);
-          background: var(--surface-glass);
+          background: rgba(var(--acrylic-tint-rgb), var(--acrylic-opacity));
+          backdrop-filter: blur(var(--acrylic-blur)) saturate(var(--acrylic-saturation));
+          -webkit-backdrop-filter: blur(var(--acrylic-blur)) saturate(var(--acrylic-saturation));
           -webkit-app-region: no-drag;
         }
 
@@ -327,17 +334,13 @@ export function Terminal({
           flex: 1;
           position: relative;
           overflow: hidden;
-          background: var(--terminal-panel-bg);
-          backdrop-filter: blur(30px) saturate(1.5);
-          -webkit-backdrop-filter: blur(30px) saturate(1.5);
+          background: transparent;
         }
 
         .terminal-session {
           position: absolute;
           inset: 0;
           background: var(--terminal-bg);
-          backdrop-filter: blur(24px) saturate(1.35);
-          -webkit-backdrop-filter: blur(24px) saturate(1.35);
         }
 
         .terminal-element .xterm,
@@ -391,7 +394,9 @@ interface TerminalSessionProps {
   connection: Connection;
   active: boolean;
   theme: 'dark' | 'light';
-  glassOpacity: number;
+  terminalOpacity: number;
+  terminalFontSize: number;
+  terminalCursorBlink: boolean;
   onStatusChange: (id: string, status: TerminalStatus) => void;
 }
 
@@ -399,7 +404,9 @@ function TerminalSession({
   connection,
   active,
   theme,
-  glassOpacity,
+  terminalOpacity,
+  terminalFontSize,
+  terminalCursorBlink,
   onStatusChange,
 }: TerminalSessionProps): React.ReactElement {
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -425,11 +432,11 @@ function TerminalSession({
       setErrorMsg('');
 
       const term = new XTerm({
-        cursorBlink: true,
+        cursorBlink: terminalCursorBlink,
         cursorStyle: 'bar',
-        fontSize: 14,
+        fontSize: terminalFontSize,
         fontFamily: '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, "Courier New", monospace',
-        theme: getTerminalTheme(theme, glassOpacity),
+        theme: getTerminalTheme(theme, terminalOpacity),
         allowProposedApi: true,
         scrollback: 5000,
       });
@@ -538,9 +545,23 @@ function TerminalSession({
 
   useEffect(() => {
     if (xtermRef.current) {
-      xtermRef.current.options.theme = getTerminalTheme(theme, glassOpacity);
+      xtermRef.current.options.theme = getTerminalTheme(theme, terminalOpacity);
     }
-  }, [theme, glassOpacity]);
+  }, [theme, terminalOpacity]);
+
+  useEffect(() => {
+    if (xtermRef.current) {
+      xtermRef.current.options.fontSize = terminalFontSize;
+      xtermRef.current.options.cursorBlink = terminalCursorBlink;
+      requestAnimationFrame(() => {
+        try {
+          fitAddonRef.current?.fit();
+        } catch (_) {
+          // ignore fit errors while xterm is settling
+        }
+      });
+    }
+  }, [terminalFontSize, terminalCursorBlink]);
 
   useEffect(() => {
     if (active && fitAddonRef.current) {

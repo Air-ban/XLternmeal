@@ -32,7 +32,7 @@ export function Sidebar({
   onEdit,
 }: SidebarProps): React.ReactElement {
   return (
-    <aside className="sidebar">
+    <aside className="sidebar acrylic">
       <div className="sidebar-header">
         <div className="logo">
           <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
@@ -134,12 +134,14 @@ export function Sidebar({
         .sidebar {
           width: 280px;
           min-width: 280px;
-          background: var(--bg-secondary);
-          border-right: 1px solid var(--border-color);
+          border-left: none;
+          border-top: none;
+          border-bottom: none;
           display: flex;
           flex-direction: column;
-          height: 100vh;
+          height: 100%;
           user-select: none;
+          box-shadow: 12px 0 42px rgba(0, 0, 0, 0.18);
         }
 
         .sidebar-header {

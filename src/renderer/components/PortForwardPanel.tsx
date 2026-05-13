@@ -83,7 +83,7 @@ export function PortForwardPanel({ sessionId }: PortForwardPanelProps): React.Re
 
   return (
     <div className="forward-panel">
-      <form className="forward-form" onSubmit={handleStart}>
+      <form className="forward-form acrylic" onSubmit={handleStart}>
         <div className="field">
           <label>Local Host</label>
           <input value={localHost} onChange={(e) => setLocalHost(e.target.value)} />
@@ -134,7 +134,7 @@ export function PortForwardPanel({ sessionId }: PortForwardPanelProps): React.Re
           height: 100%;
           display: flex;
           flex-direction: column;
-          background: var(--bg-primary);
+          background: var(--solid-surface);
           color: var(--text-primary);
           padding: 14px;
         }
@@ -145,9 +145,8 @@ export function PortForwardPanel({ sessionId }: PortForwardPanelProps): React.Re
           gap: 10px;
           align-items: end;
           padding: 12px;
-          border: 1px solid var(--border-color);
           border-radius: var(--radius);
-          background: var(--bg-secondary);
+          box-shadow: var(--shadow-sm);
         }
 
         .field {
@@ -168,7 +167,7 @@ export function PortForwardPanel({ sessionId }: PortForwardPanelProps): React.Re
           padding: 0 10px;
           border: 1px solid var(--border-color);
           border-radius: var(--radius-sm);
-          background: var(--bg-primary);
+          background: var(--solid-surface);
           color: var(--text-primary);
         }
 
@@ -221,7 +220,7 @@ export function PortForwardPanel({ sessionId }: PortForwardPanelProps): React.Re
           border: 1px solid var(--border-color);
           border-radius: var(--radius);
           overflow: hidden;
-          background: var(--bg-secondary);
+          background: var(--solid-surface-2);
         }
 
         .forward-row {
@@ -243,7 +242,7 @@ export function PortForwardPanel({ sessionId }: PortForwardPanelProps): React.Re
         .forward-header {
           color: var(--text-muted);
           font-weight: 600;
-          background: var(--bg-primary);
+          background: var(--solid-surface);
         }
 
         .active-status {

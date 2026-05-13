@@ -139,7 +139,7 @@ export function SFTPPanel({ sessionId }: SFTPPanelProps): React.ReactElement {
 
   return (
     <div className="sftp-panel">
-      <div className="sftp-toolbar">
+      <div className="sftp-toolbar acrylic">
         <button className="tool-btn" onClick={() => loadFiles(parentRemotePath(remotePath))} disabled={remotePath === '/'}>
           Up
         </button>
@@ -199,7 +199,7 @@ export function SFTPPanel({ sessionId }: SFTPPanelProps): React.ReactElement {
           height: 100%;
           display: flex;
           flex-direction: column;
-          background: var(--bg-primary);
+          background: var(--solid-surface);
           color: var(--text-primary);
         }
 
@@ -209,14 +209,17 @@ export function SFTPPanel({ sessionId }: SFTPPanelProps): React.ReactElement {
           gap: 8px;
           padding: 10px 12px;
           border-bottom: 1px solid var(--border-color);
-          background: var(--bg-secondary);
+          border-left: none;
+          border-right: none;
+          border-top: none;
+          box-shadow: none;
         }
 
         .tool-btn {
           padding: 7px 10px;
           border: 1px solid var(--border-color);
           border-radius: var(--radius-sm);
-          background: var(--bg-primary);
+          background: var(--solid-surface-2);
           color: var(--text-primary);
           cursor: pointer;
           font-size: 12px;
@@ -237,7 +240,7 @@ export function SFTPPanel({ sessionId }: SFTPPanelProps): React.ReactElement {
           padding: 7px 10px;
           border: 1px solid var(--border-color);
           border-radius: var(--radius-sm);
-          background: var(--bg-primary);
+          background: var(--solid-surface-2);
           color: var(--text-secondary);
           font-family: Consolas, monospace;
           font-size: 12px;
@@ -275,7 +278,7 @@ export function SFTPPanel({ sessionId }: SFTPPanelProps): React.ReactElement {
         }
 
         .file-row:not(.file-header):hover {
-          background: var(--bg-secondary);
+          background: var(--solid-surface-2);
         }
 
         .file-header {

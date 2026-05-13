@@ -7,7 +7,7 @@ interface WelcomeProps {
 export function Welcome({ onNewConnection }: WelcomeProps): React.ReactElement {
   return (
     <div className="welcome">
-      <div className="welcome-content">
+      <div className="welcome-content acrylic">
         <div className="welcome-icon">
           <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
             <rect x="4" y="4" width="56" height="56" rx="14" stroke="var(--accent)" strokeWidth="1.5" strokeOpacity="0.3" />
@@ -18,7 +18,7 @@ export function Welcome({ onNewConnection }: WelcomeProps): React.ReactElement {
         <h1 className="welcome-title">XLterm</h1>
         <p className="welcome-subtitle">现代 SSH 终端客户端</p>
         <p className="welcome-desc">
-          安全连接远程服务器，管理多个终端会话，并使用 SFTP 与端口转发完成日常运维工作。
+          安全连接远程服务器，管理多个终端会话，并通过 SFTP 与端口转发完成日常运维工作。
         </p>
         <button className="welcome-btn" onClick={onNewConnection}>
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -48,24 +48,27 @@ export function Welcome({ onNewConnection }: WelcomeProps): React.ReactElement {
           align-items: center;
           justify-content: center;
           height: 100%;
-          background: var(--bg-primary);
+          padding: 32px;
+          background: transparent;
         }
 
         .welcome-content {
           text-align: center;
-          max-width: 420px;
+          width: min(440px, 100%);
+          padding: 38px;
+          border-radius: 16px;
           animation: scaleIn 0.3s ease;
         }
 
         .welcome-icon {
           margin-bottom: 24px;
-          opacity: 0.6;
+          opacity: 0.72;
         }
 
         .welcome-title {
           font-size: 36px;
           font-weight: 800;
-          letter-spacing: -1px;
+          letter-spacing: 0;
           color: var(--text-primary);
           margin-bottom: 4px;
         }
@@ -97,12 +100,12 @@ export function Welcome({ onNewConnection }: WelcomeProps): React.ReactElement {
           font-weight: 600;
           cursor: pointer;
           transition: all var(--transition);
-          box-shadow: 0 0 20px rgba(88, 166, 255, 0.15);
+          box-shadow: 0 12px 30px rgba(88, 166, 255, 0.22);
         }
 
         .welcome-btn:hover {
           background: var(--accent-hover);
-          box-shadow: 0 0 30px rgba(88, 166, 255, 0.25);
+          box-shadow: 0 16px 36px rgba(88, 166, 255, 0.28);
           transform: translateY(-1px);
         }
 
@@ -124,7 +127,7 @@ export function Welcome({ onNewConnection }: WelcomeProps): React.ReactElement {
 
         .shortcut-item kbd {
           padding: 2px 8px;
-          background: var(--bg-tertiary);
+          background: var(--solid-surface-2);
           border: 1px solid var(--border-color);
           border-radius: 4px;
           font-size: 11px;

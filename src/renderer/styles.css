@@ -2,6 +2,7 @@
 :root,
 [data-theme="dark"] {
   color-scheme: dark;
+  --app-backdrop: transparent;
   --bg-primary-alpha: 0.54;
   --bg-secondary-alpha: 0.48;
   --bg-tertiary-alpha: 0.56;
@@ -19,6 +20,15 @@
   --terminal-bg: rgba(3, 7, 12, var(--terminal-alpha));
   --terminal-panel-bg: rgba(3, 7, 12, var(--terminal-panel-alpha));
   --border-color: rgba(139, 148, 158, 0.24);
+  --solid-surface: rgba(13, 17, 23, 0.72);
+  --solid-surface-2: rgba(22, 27, 34, 0.68);
+  --acrylic-tint-rgb: 24 28 36;
+  --acrylic-opacity: 0.55;
+  --acrylic-blur: 32px;
+  --acrylic-saturation: 145%;
+  --acrylic-border: rgba(255, 255, 255, 0.14);
+  --acrylic-highlight: rgba(255, 255, 255, 0.08);
+  --acrylic-shadow: 0 18px 60px rgba(0, 0, 0, 0.34);
   --text-primary: #e6edf3;
   --text-secondary: #8b949e;
   --text-muted: #6e7681;
@@ -42,6 +52,7 @@
 /* ========== Light theme ========== */
 [data-theme="light"] {
   color-scheme: light;
+  --app-backdrop: transparent;
   --bg-primary-alpha: 0.58;
   --bg-secondary-alpha: 0.48;
   --bg-tertiary-alpha: 0.58;
@@ -59,6 +70,15 @@
   --terminal-bg: rgba(255, 255, 255, var(--terminal-alpha));
   --terminal-panel-bg: rgba(255, 255, 255, var(--terminal-panel-alpha));
   --border-color: rgba(101, 109, 118, 0.22);
+  --solid-surface: rgba(255, 255, 255, 0.74);
+  --solid-surface-2: rgba(246, 248, 250, 0.7);
+  --acrylic-tint-rgb: 245 248 252;
+  --acrylic-opacity: 0.55;
+  --acrylic-blur: 32px;
+  --acrylic-saturation: 145%;
+  --acrylic-border: rgba(255, 255, 255, 0.44);
+  --acrylic-highlight: rgba(255, 255, 255, 0.7);
+  --acrylic-shadow: 0 18px 60px rgba(31, 35, 40, 0.18);
   --text-primary: #1f2328;
   --text-secondary: #656d76;
   --text-muted: #8c959f;
@@ -95,7 +115,7 @@ html, body {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
-  background: transparent;
+  background: var(--app-backdrop);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   transition: background-color 0.3s ease, color 0.3s ease;
@@ -105,9 +125,8 @@ body {
   height: 100vh;
   display: flex;
   padding-top: var(--titlebar-height);
-  background: var(--surface-glass);
-  backdrop-filter: blur(28px) saturate(1.45);
-  -webkit-backdrop-filter: blur(28px) saturate(1.45);
+  position: relative;
+  background: transparent;
   color: var(--text-primary);
 }
 
@@ -123,19 +142,32 @@ input, button, select, textarea, optgroup, fieldset {
   background: none;
 }
 
-aside,
-main,
-.sidebar,
-.main-area,
-.terminal-container,
-.terminal-wrapper,
-.terminal-session,
-.welcome,
-.dialog,
-.sftp-panel,
-.forward-panel {
-  backdrop-filter: blur(24px) saturate(1.35);
-  -webkit-backdrop-filter: blur(24px) saturate(1.35);
+.acrylic {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: rgba(var(--acrylic-tint-rgb), var(--acrylic-opacity));
+  border: 1px solid var(--acrylic-border);
+  box-shadow: var(--acrylic-shadow);
+  backdrop-filter: blur(var(--acrylic-blur)) saturate(var(--acrylic-saturation));
+  -webkit-backdrop-filter: blur(var(--acrylic-blur)) saturate(var(--acrylic-saturation));
+}
+
+.acrylic::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.045;
+  background-image:
+    repeating-radial-gradient(circle at 0 0, rgba(255, 255, 255, 0.9) 0 1px, transparent 1px 3px);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .acrylic {
+    background: rgba(var(--acrylic-tint-rgb), 0.88);
+  }
 }
 
 /* Placeholder text matches muted color */
@@ -162,7 +194,7 @@ input:focus, textarea:focus, select:focus {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--surface-glass);
+  background: rgba(var(--acrylic-tint-rgb), var(--main-area-opacity, 0));
   color: var(--text-primary);
   min-width: 0;
 }

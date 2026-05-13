@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme } from 'electron';
 import * as path from 'path';
 import { SSHManager } from './ssh';
 
@@ -6,6 +6,7 @@ let mainWindow: BrowserWindow | null = null;
 const sshManager = new SSHManager();
 
 nativeTheme.themeSource = 'system';
+Menu.setApplicationMenu(null);
 
 function getBackgroundColor(): string {
   return '#00000000';
@@ -34,7 +35,7 @@ function createWindow(): void {
     minHeight: 600,
     transparent: true,
     backgroundColor: getBackgroundColor(),
-    title: 'XLterm - SSH Client',
+    title: '',
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -49,6 +50,13 @@ function createWindow(): void {
       titleBarStyle: 'hiddenInset',
       frame: false,
     }),
+  });
+
+  mainWindow.setMenu(null);
+  mainWindow.setMenuBarVisibility(false);
+  mainWindow.on('page-title-updated', (event) => {
+    event.preventDefault();
+    mainWindow?.setTitle('');
   });
 
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
@@ -101,11 +109,19 @@ nativeTheme.on('updated', () => {
 });
 
 ipcMain.handle('window:minimize', () => {
-  mainWindow?.minimize();
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!mainWindow.isFocused()) {
+    mainWindow.focus();
+  }
+  mainWindow.minimize();
 });
 
 ipcMain.handle('window:toggle-maximize', () => {
-  if (!mainWindow) return false;
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+
+  if (!mainWindow.isFocused()) {
+    mainWindow.focus();
+  }
 
   if (mainWindow.isMaximized()) {
     mainWindow.unmaximize();
@@ -117,7 +133,8 @@ ipcMain.handle('window:toggle-maximize', () => {
 });
 
 ipcMain.handle('window:close', () => {
-  mainWindow?.close();
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.close();
 });
 
 ipcMain.handle('window:is-maximized', () => {

@@ -71,7 +71,7 @@ export function ConnectionDialog({
 
   return (
     <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog" onClick={(e) => e.stopPropagation()}>
+      <div className="dialog acrylic" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-header">
           <h2>{connection ? 'Edit Connection' : 'New Connection'}</h2>
           <button className="dialog-close" onClick={onClose}>
@@ -196,13 +196,10 @@ export function ConnectionDialog({
         }
 
         .dialog {
-          background: var(--bg-secondary);
-          border: 1px solid var(--border-color);
           border-radius: 12px;
           width: 480px;
           max-height: 90vh;
           overflow-y: auto;
-          box-shadow: var(--shadow);
           animation: scaleIn 0.2s ease;
         }
 

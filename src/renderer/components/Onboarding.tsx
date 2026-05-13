@@ -7,7 +7,7 @@ interface OnboardingProps {
 const features = [
   {
     title: '连接服务器',
-    desc: '保存常用主机，单击即可打开 SSH 会话。',
+    desc: '保存常用主机，点击即可打开 SSH 会话。',
   },
   {
     title: '多标签终端',
@@ -26,7 +26,7 @@ const features = [
 export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
   return (
     <div className="onboarding">
-      <div className="onboarding-shell">
+      <div className="onboarding-shell acrylic">
         <section className="onboarding-visual" aria-hidden="true">
           <div className="terminal-card">
             <div className="terminal-top">
@@ -47,18 +47,18 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
             </div>
           </div>
 
-          <div className="orbit orbit-one"></div>
-          <div className="orbit orbit-two"></div>
-          <div className="node node-a">SSH</div>
-          <div className="node node-b">SFTP</div>
-          <div className="node node-c">TCP</div>
+          <div className="signal-grid">
+            <span>SSH</span>
+            <span>SFTP</span>
+            <span>TCP</span>
+          </div>
         </section>
 
         <section className="onboarding-content">
           <div className="eyebrow">首次启动</div>
           <h1>欢迎来到 XLterm</h1>
           <p className="lead">
-            一个带云母玻璃效果的 SSH 工作台，适合日常连接服务器、传输文件和调试远程服务。
+            一个带 Microsoft Acrylic 质感的 SSH 工作台，适合日常连接服务器、传输文件和调试远程服务。
           </p>
 
           <div className="feature-list">
@@ -83,12 +83,6 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
 
       <style>{`
         .onboarding {
-          --onboarding-overlay-bg: rgba(9, 13, 20, 0.12);
-          --onboarding-shell-bg: rgba(13, 17, 23, 0.36);
-          --onboarding-visual-bg: rgba(3, 7, 12, 0.18);
-          --onboarding-terminal-bg: rgba(3, 7, 12, 0.52);
-          --onboarding-chip-bg: rgba(13, 17, 23, 0.48);
-          --onboarding-feature-bg: rgba(22, 27, 34, 0.26);
           position: fixed;
           inset: 0;
           z-index: 12000;
@@ -96,20 +90,15 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
           align-items: center;
           justify-content: center;
           padding: 40px;
-          background: var(--onboarding-overlay-bg);
-          backdrop-filter: blur(42px) saturate(1.75);
-          -webkit-backdrop-filter: blur(42px) saturate(1.75);
+          background: rgba(0, 0, 0, 0.16);
+          backdrop-filter: blur(18px) saturate(1.2);
+          -webkit-backdrop-filter: blur(18px) saturate(1.2);
           -webkit-app-region: no-drag;
           animation: onboardingFade 0.24s ease;
         }
 
         [data-theme="light"] .onboarding {
-          --onboarding-overlay-bg: rgba(248, 250, 252, 0.1);
-          --onboarding-shell-bg: rgba(255, 255, 255, 0.42);
-          --onboarding-visual-bg: rgba(246, 248, 250, 0.2);
-          --onboarding-terminal-bg: rgba(255, 255, 255, 0.58);
-          --onboarding-chip-bg: rgba(255, 255, 255, 0.5);
-          --onboarding-feature-bg: rgba(246, 248, 250, 0.32);
+          background: rgba(255, 255, 255, 0.16);
         }
 
         .onboarding-shell {
@@ -117,13 +106,7 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
           min-height: 560px;
           display: grid;
           grid-template-columns: minmax(360px, 1fr) minmax(360px, 0.9fr);
-          overflow: hidden;
-          border: 1px solid var(--border-color);
           border-radius: 18px;
-          background: var(--onboarding-shell-bg);
-          box-shadow: var(--shadow);
-          backdrop-filter: blur(36px) saturate(1.65);
-          -webkit-backdrop-filter: blur(36px) saturate(1.65);
         }
 
         .onboarding-visual {
@@ -133,10 +116,8 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
           justify-content: center;
           min-height: 560px;
           overflow: hidden;
-          background: var(--onboarding-visual-bg);
           border-right: 1px solid var(--border-color);
-          backdrop-filter: blur(26px) saturate(1.45);
-          -webkit-backdrop-filter: blur(26px) saturate(1.45);
+          background: rgba(var(--acrylic-tint-rgb), 0.2);
         }
 
         .terminal-card {
@@ -146,11 +127,9 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
           max-width: 420px;
           border: 1px solid var(--border-color);
           border-radius: 14px;
-          background: var(--onboarding-terminal-bg);
+          background: var(--solid-surface);
           box-shadow: var(--shadow-sm);
           overflow: hidden;
-          backdrop-filter: blur(28px) saturate(1.45);
-          -webkit-backdrop-filter: blur(28px) saturate(1.45);
           animation: terminalFloat 4.8s ease-in-out infinite;
         }
 
@@ -161,7 +140,7 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
           gap: 7px;
           padding: 0 14px;
           border-bottom: 1px solid var(--border-color);
-          background: var(--chrome-bg);
+          background: var(--solid-surface-2);
         }
 
         .terminal-top span {
@@ -223,48 +202,36 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
           animation: blink 1s steps(1) infinite;
         }
 
-        .orbit {
+        .signal-grid {
           position: absolute;
-          border: 1px solid var(--border-color);
-          border-radius: 50%;
-          opacity: 0.65;
+          inset: 54px;
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-auto-rows: 1fr;
+          gap: 18px;
+          opacity: 0.5;
         }
 
-        .orbit-one {
-          width: 440px;
-          height: 440px;
-          animation: spin 18s linear infinite;
-        }
-
-        .orbit-two {
-          width: 300px;
-          height: 300px;
-          animation: spin 12s linear infinite reverse;
-        }
-
-        .node {
-          position: absolute;
-          z-index: 3;
-          min-width: 58px;
-          height: 30px;
+        .signal-grid span {
           display: flex;
           align-items: center;
           justify-content: center;
           border: 1px solid var(--border-color);
-          border-radius: 999px;
-          background: var(--onboarding-chip-bg);
+          border-radius: var(--radius);
           color: var(--accent);
           font-size: 11px;
           font-weight: 700;
-          box-shadow: var(--shadow-sm);
-          backdrop-filter: blur(24px) saturate(1.35);
-          -webkit-backdrop-filter: blur(24px) saturate(1.35);
-          animation: nodePulse 2.4s ease-in-out infinite;
         }
 
-        .node-a { top: 95px; left: 76px; }
-        .node-b { right: 70px; top: 150px; animation-delay: 220ms; }
-        .node-c { left: 110px; bottom: 118px; animation-delay: 420ms; }
+        .signal-grid span:nth-child(2) {
+          transform: translateY(34px);
+        }
+
+        .signal-grid span:nth-child(3) {
+          grid-column: 1 / -1;
+          width: 42%;
+          justify-self: center;
+        }
 
         .onboarding-content {
           padding: 56px 48px;
@@ -309,9 +276,7 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
           padding: 12px;
           border: 1px solid var(--border-color);
           border-radius: var(--radius);
-          background: var(--onboarding-feature-bg);
-          backdrop-filter: blur(20px) saturate(1.3);
-          -webkit-backdrop-filter: blur(20px) saturate(1.3);
+          background: var(--solid-surface-2);
           opacity: 0;
           transform: translateY(10px);
           animation: featureIn 0.42s ease forwards;
@@ -360,7 +325,7 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
           cursor: pointer;
           font-size: 14px;
           font-weight: 700;
-          box-shadow: 0 10px 26px var(--accent-subtle);
+          box-shadow: 0 10px 26px rgba(88, 166, 255, 0.22);
           transition: transform var(--transition), background var(--transition);
         }
 
@@ -387,16 +352,6 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
         @keyframes blink {
           0%, 50% { opacity: 1; }
           51%, 100% { opacity: 0; }
-        }
-
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-
-        @keyframes nodePulse {
-          0%, 100% { transform: scale(1); opacity: 0.88; }
-          50% { transform: scale(1.06); opacity: 1; }
         }
 
         @keyframes featureIn {
