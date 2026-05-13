@@ -16,29 +16,28 @@ export function Welcome({ onNewConnection }: WelcomeProps): React.ReactElement {
           </svg>
         </div>
         <h1 className="welcome-title">XLterm</h1>
-        <p className="welcome-subtitle">Modern SSH Terminal Client</p>
+        <p className="welcome-subtitle">现代 SSH 终端客户端</p>
         <p className="welcome-desc">
-          Connect to your remote servers securely with a beautiful,
-          modern terminal interface. Manage multiple sessions with ease.
+          安全连接远程服务器，管理多个终端会话，并使用 SFTP 与端口转发完成日常运维工作。
         </p>
         <button className="welcome-btn" onClick={onNewConnection}>
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <path d="M9 3v12M3 9h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          New Connection
+          新建连接
         </button>
         <div className="welcome-shortcuts">
           <div className="shortcut-item">
             <kbd>Ctrl+N</kbd>
-            <span>New Connection</span>
+            <span>新建连接</span>
           </div>
           <div className="shortcut-item">
             <kbd>Ctrl+W</kbd>
-            <span>Close Tab</span>
+            <span>关闭标签</span>
           </div>
           <div className="shortcut-item">
             <kbd>Ctrl+Tab</kbd>
-            <span>Switch Tab</span>
+            <span>切换标签</span>
           </div>
         </div>
       </div>

@@ -5,6 +5,7 @@ import { Terminal } from './components/Terminal';
 import { ConnectionDialog } from './components/ConnectionDialog';
 import { TitleBar } from './components/TitleBar';
 import { SettingsDialog } from './components/SettingsDialog';
+import { Onboarding } from './components/Onboarding';
 
 declare global {
   interface Window {
@@ -70,6 +71,9 @@ export function App(): React.ReactElement {
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    return localStorage.getItem('xlterm-onboarding-complete') !== 'true';
+  });
   const [editingConnection, setEditingConnection] = useState<Connection | null>(null);
   const [savedConnections, setSavedConnections] = useState<Connection[]>(() => {
     try {
@@ -232,6 +236,14 @@ export function App(): React.ReactElement {
           glassOpacity={glassOpacity}
           onGlassOpacityChange={setGlassOpacity}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+      {showOnboarding && (
+        <Onboarding
+          onFinish={() => {
+            localStorage.setItem('xlterm-onboarding-complete', 'true');
+            setShowOnboarding(false);
+          }}
         />
       )}
     </>
