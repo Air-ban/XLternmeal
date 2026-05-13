@@ -64,7 +64,7 @@ export function App(): React.ReactElement {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [glassOpacity, setGlassOpacity] = useState(() => {
     const saved = Number(localStorage.getItem('xlterm-glass-opacity'));
-    return Number.isFinite(saved) && saved >= 0.35 && saved <= 1 ? saved : 1;
+    return Number.isFinite(saved) && saved >= 0.35 && saved <= 1 ? saved : 0.5;
   });
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
