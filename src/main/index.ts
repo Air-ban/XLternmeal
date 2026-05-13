@@ -63,6 +63,15 @@ function createWindow(): void {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
+
+    // Force DWM to recomposite the transparent window so backdrop-filter
+    // blur engages immediately — otherwise it stays inert until a resize.
+    if (process.platform === 'win32') {
+      mainWindow?.setBackgroundMaterial('acrylic');
+      mainWindow?.setOpacity(0.999);
+      setTimeout(() => mainWindow?.setOpacity(1), 60);
+    }
+
     mainWindow?.webContents.send('theme:changed', isDark ? 'dark' : 'light');
   });
 

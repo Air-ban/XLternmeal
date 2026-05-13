@@ -7,7 +7,6 @@ interface SettingsDialogProps {
   onThemeChange: (theme: 'dark' | 'light') => void;
   onSettingsChange: (settings: Partial<AppSettings>) => void;
   onResetSettings: () => void;
-  onShowOnboarding: () => void;
   onClose: () => void;
 }
 
@@ -21,7 +20,6 @@ export function SettingsDialog({
   onThemeChange,
   onSettingsChange,
   onResetSettings,
-  onShowOnboarding,
   onClose,
 }: SettingsDialogProps): React.ReactElement {
   const setNumber = (key: keyof AppSettings, value: string, scale = 1) => {
@@ -164,8 +162,8 @@ export function SettingsDialog({
           </section>
 
           <div className="settings-footer">
-            <button className="secondary-btn" onClick={onShowOnboarding}>显示引导</button>
-            <button className="secondary-btn" onClick={onResetSettings}>重置设置</button>
+            <button className="secondary-btn" onClick={onResetSettings}>重置</button>
+            <button className="primary-btn" onClick={onClose}>应用</button>
           </div>
         </div>
       </div>
@@ -178,14 +176,20 @@ export function SettingsDialog({
           display: flex;
           align-items: center;
           justify-content: center;
-          background: rgba(0, 0, 0, 0.16);
-          backdrop-filter: blur(18px) saturate(1.25);
-          -webkit-backdrop-filter: blur(18px) saturate(1.25);
+          background: rgba(0, 0, 0, 0.48);
+          backdrop-filter: blur(12px) saturate(1.15);
+          -webkit-backdrop-filter: blur(12px) saturate(1.15);
           -webkit-app-region: no-drag;
+          animation: overlayIn 0.18s ease;
         }
 
         [data-theme="light"] .settings-overlay {
-          background: rgba(255, 255, 255, 0.14);
+          background: rgba(0, 0, 0, 0.28);
+        }
+
+        @keyframes overlayIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
 
         .settings-dialog {
@@ -359,6 +363,22 @@ export function SettingsDialog({
         .secondary-btn:hover {
           border-color: var(--accent);
           color: var(--accent);
+        }
+
+        .primary-btn {
+          padding: 8px 20px;
+          border: 1px solid var(--accent);
+          border-radius: var(--radius-sm);
+          background: var(--accent);
+          color: #fff;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 600;
+          transition: all var(--transition);
+        }
+
+        .primary-btn:hover {
+          background: var(--accent-hover);
         }
       `}</style>
     </div>

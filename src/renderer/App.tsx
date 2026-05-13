@@ -286,7 +286,6 @@ export function App(): React.ReactElement {
           onThemeChange={handleThemeChange}
           onSettingsChange={handleSettingsChange}
           onResetSettings={() => setSettings(DEFAULT_SETTINGS)}
-          onShowOnboarding={() => setShowOnboarding(true)}
           onClose={() => setShowSettings(false)}
         />
       )}

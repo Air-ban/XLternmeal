@@ -90,15 +90,15 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
           align-items: center;
           justify-content: center;
           padding: 40px;
-          background: rgba(0, 0, 0, 0.16);
-          backdrop-filter: blur(18px) saturate(1.2);
-          -webkit-backdrop-filter: blur(18px) saturate(1.2);
+          background: rgba(0, 0, 0, 0.54);
+          backdrop-filter: blur(12px) saturate(1.15);
+          -webkit-backdrop-filter: blur(12px) saturate(1.15);
           -webkit-app-region: no-drag;
           animation: onboardingFade 0.24s ease;
         }
 
         [data-theme="light"] .onboarding {
-          background: rgba(255, 255, 255, 0.16);
+          background: rgba(0, 0, 0, 0.32);
         }
 
         .onboarding-shell {
