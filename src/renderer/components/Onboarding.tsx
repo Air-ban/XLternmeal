@@ -83,6 +83,12 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
 
       <style>{`
         .onboarding {
+          --onboarding-overlay-bg: rgba(9, 13, 20, 0.12);
+          --onboarding-shell-bg: rgba(13, 17, 23, 0.36);
+          --onboarding-visual-bg: rgba(3, 7, 12, 0.18);
+          --onboarding-terminal-bg: rgba(3, 7, 12, 0.52);
+          --onboarding-chip-bg: rgba(13, 17, 23, 0.48);
+          --onboarding-feature-bg: rgba(22, 27, 34, 0.26);
           position: fixed;
           inset: 0;
           z-index: 12000;
@@ -90,11 +96,20 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
           align-items: center;
           justify-content: center;
           padding: 40px;
-          background: var(--surface-glass);
-          backdrop-filter: blur(34px) saturate(1.6);
-          -webkit-backdrop-filter: blur(34px) saturate(1.6);
+          background: var(--onboarding-overlay-bg);
+          backdrop-filter: blur(42px) saturate(1.75);
+          -webkit-backdrop-filter: blur(42px) saturate(1.75);
           -webkit-app-region: no-drag;
           animation: onboardingFade 0.24s ease;
+        }
+
+        [data-theme="light"] .onboarding {
+          --onboarding-overlay-bg: rgba(248, 250, 252, 0.1);
+          --onboarding-shell-bg: rgba(255, 255, 255, 0.42);
+          --onboarding-visual-bg: rgba(246, 248, 250, 0.2);
+          --onboarding-terminal-bg: rgba(255, 255, 255, 0.58);
+          --onboarding-chip-bg: rgba(255, 255, 255, 0.5);
+          --onboarding-feature-bg: rgba(246, 248, 250, 0.32);
         }
 
         .onboarding-shell {
@@ -105,8 +120,10 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
           overflow: hidden;
           border: 1px solid var(--border-color);
           border-radius: 18px;
-          background: var(--surface-strong);
+          background: var(--onboarding-shell-bg);
           box-shadow: var(--shadow);
+          backdrop-filter: blur(36px) saturate(1.65);
+          -webkit-backdrop-filter: blur(36px) saturate(1.65);
         }
 
         .onboarding-visual {
@@ -116,8 +133,10 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
           justify-content: center;
           min-height: 560px;
           overflow: hidden;
-          background: var(--terminal-panel-bg);
+          background: var(--onboarding-visual-bg);
           border-right: 1px solid var(--border-color);
+          backdrop-filter: blur(26px) saturate(1.45);
+          -webkit-backdrop-filter: blur(26px) saturate(1.45);
         }
 
         .terminal-card {
@@ -127,9 +146,11 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
           max-width: 420px;
           border: 1px solid var(--border-color);
           border-radius: 14px;
-          background: var(--terminal-bg);
+          background: var(--onboarding-terminal-bg);
           box-shadow: var(--shadow-sm);
           overflow: hidden;
+          backdrop-filter: blur(28px) saturate(1.45);
+          -webkit-backdrop-filter: blur(28px) saturate(1.45);
           animation: terminalFloat 4.8s ease-in-out infinite;
         }
 
@@ -231,11 +252,13 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
           justify-content: center;
           border: 1px solid var(--border-color);
           border-radius: 999px;
-          background: var(--surface-strong);
+          background: var(--onboarding-chip-bg);
           color: var(--accent);
           font-size: 11px;
           font-weight: 700;
           box-shadow: var(--shadow-sm);
+          backdrop-filter: blur(24px) saturate(1.35);
+          -webkit-backdrop-filter: blur(24px) saturate(1.35);
           animation: nodePulse 2.4s ease-in-out infinite;
         }
 
@@ -286,7 +309,9 @@ export function Onboarding({ onFinish }: OnboardingProps): React.ReactElement {
           padding: 12px;
           border: 1px solid var(--border-color);
           border-radius: var(--radius);
-          background: var(--bg-secondary);
+          background: var(--onboarding-feature-bg);
+          backdrop-filter: blur(20px) saturate(1.3);
+          -webkit-backdrop-filter: blur(20px) saturate(1.3);
           opacity: 0;
           transform: translateY(10px);
           animation: featureIn 0.42s ease forwards;
