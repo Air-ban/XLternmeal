@@ -52,4 +52,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     start: (config: any) => ipcRenderer.invoke('forward:start', config),
     stop: (id: string) => ipcRenderer.invoke('forward:stop', id),
   },
+  agent: {
+    createPlan: (request: any) => ipcRenderer.invoke('agent:plan', request),
+    executePlan: (request: any) => ipcRenderer.invoke('agent:execute', request),
+    getContext: (sessionId: string) => ipcRenderer.invoke('agent:context', sessionId),
+    clearContext: (sessionId: string) => ipcRenderer.invoke('agent:clear-context', sessionId),
+    onStatus: (requestId: string, callback: (event: { status: string; detail: string }) => void) => {
+      const channel = `agent:status:${requestId}`;
+      const listener = (_event: any, payload: { status: string; detail: string }) => callback(payload);
+      ipcRenderer.on(channel, listener);
+      return () => ipcRenderer.removeListener(channel, listener);
+    },
+  },
 });

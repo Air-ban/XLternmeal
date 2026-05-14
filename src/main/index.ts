@@ -1,9 +1,11 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme } from 'electron';
 import * as path from 'path';
 import { SSHManager } from './ssh';
+import { AgentManager } from './agent';
 
 let mainWindow: BrowserWindow | null = null;
 const sshManager = new SSHManager();
+const agentManager = new AgentManager(sshManager);
 
 nativeTheme.themeSource = 'system';
 Menu.setApplicationMenu(null);
@@ -187,6 +189,32 @@ ipcMain.handle('ssh:execute', async (_event, sessionId: string, command: string)
   } catch (err: any) {
     return { success: false, error: err.message };
   }
+});
+
+// LLM Agent IPC handlers
+ipcMain.handle('agent:plan', async (event, request: any) => {
+  return agentManager.createPlan(request, (status, detail) => {
+    if (request?.requestId) {
+      event.sender.send(`agent:status:${request.requestId}`, { status, detail });
+    }
+  });
+});
+
+ipcMain.handle('agent:execute', async (event, request: any) => {
+  return agentManager.executePlan(request, (status, detail) => {
+    if (request?.requestId) {
+      event.sender.send(`agent:status:${request.requestId}`, { status, detail });
+    }
+  });
+});
+
+ipcMain.handle('agent:context', (_event, sessionId: string) => {
+  return { success: true, context: agentManager.getContext(sessionId) };
+});
+
+ipcMain.handle('agent:clear-context', (_event, sessionId: string) => {
+  agentManager.clearContext(sessionId);
+  return { success: true };
 });
 
 // SFTP IPC handlers

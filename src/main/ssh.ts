@@ -16,6 +16,12 @@ interface SSHSession {
   stream: any;
 }
 
+export interface CommandExecutionDetails {
+  output: string;
+  exitCode: number | null;
+  signal?: string;
+}
+
 interface PortForwardConfig {
   id?: string;
   sessionId: string;
@@ -141,6 +147,10 @@ export class SSHManager {
   }
 
   execute(sessionId: string, command: string): Promise<string> {
+    return this.executeDetailed(sessionId, command).then((result) => result.output);
+  }
+
+  executeDetailed(sessionId: string, command: string): Promise<CommandExecutionDetails> {
     return new Promise((resolve, reject) => {
       const session = this.sessions.get(sessionId);
       if (!session) {
@@ -163,8 +173,12 @@ export class SSHManager {
           output += data.toString('utf-8');
         });
 
-        stream.on('close', () => {
-          resolve(output);
+        stream.on('close', (code: number | null, signal: string | undefined) => {
+          resolve({
+            output,
+            exitCode: typeof code === 'number' ? code : null,
+            signal,
+          });
         });
       });
     });

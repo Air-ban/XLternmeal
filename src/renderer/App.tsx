@@ -42,6 +42,13 @@ declare global {
         start: (config: any) => Promise<{ success: boolean; forward?: any; error?: string }>;
         stop: (id: string) => Promise<{ success: boolean; error?: string }>;
       };
+      agent: {
+        createPlan: (request: any) => Promise<{ success: boolean; plan?: any; context?: any[]; error?: string }>;
+        executePlan: (request: any) => Promise<{ success: boolean; result?: any; plan?: any; context?: any[]; error?: string }>;
+        getContext: (sessionId: string) => Promise<{ success: boolean; context?: any[]; error?: string }>;
+        clearContext: (sessionId: string) => Promise<{ success: boolean; error?: string }>;
+        onStatus: (requestId: string, callback: (event: { status: string; detail: string }) => void) => () => void;
+      };
     };
   }
 }
@@ -62,6 +69,21 @@ export interface Tab {
 }
 
 export type AcrylicTone = 'auto' | 'dark' | 'light';
+export type ApprovalMode = 'manual' | 'auto_accept';
+
+export interface LLMProviderConfig {
+  id: string;
+  name: string;
+  provider: string;
+  llmApiKey: string;
+  llmBaseUrl: string;
+  llmModel: string;
+  approvalMode: ApprovalMode;
+  temperature: number;
+  maxContextMessages: number;
+  maxRetries: number;
+  systemPrompt: string;
+}
 
 export interface AppSettings {
   acrylicOpacity: number;
@@ -71,7 +93,23 @@ export interface AppSettings {
   acrylicTone: AcrylicTone;
   terminalFontSize: number;
   terminalCursorBlink: boolean;
+  llmProviders: LLMProviderConfig[];
+  activeLlmProviderId: string;
 }
+
+const DEFAULT_LLM_PROVIDER: LLMProviderConfig = {
+  id: 'llm-openai-default',
+  name: 'OpenAI',
+  provider: 'openai',
+  llmApiKey: '',
+  llmBaseUrl: 'https://api.openai.com/v1',
+  llmModel: 'gpt-4',
+  approvalMode: 'manual',
+  temperature: 0.1,
+  maxContextMessages: 20,
+  maxRetries: 3,
+  systemPrompt: '',
+};
 
 const DEFAULT_SETTINGS: AppSettings = {
   acrylicOpacity: 0.55,
@@ -81,12 +119,67 @@ const DEFAULT_SETTINGS: AppSettings = {
   acrylicTone: 'auto',
   terminalFontSize: 14,
   terminalCursorBlink: true,
+  llmProviders: [DEFAULT_LLM_PROVIDER],
+  activeLlmProviderId: DEFAULT_LLM_PROVIDER.id,
 };
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? Math.max(min, Math.min(max, value))
+  const number = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(number)
+    ? Math.max(min, Math.min(max, number))
     : fallback;
+}
+
+function normalizeProvider(raw: any, fallback: LLMProviderConfig, index: number): LLMProviderConfig {
+  const id = typeof raw?.id === 'string' && raw.id.trim()
+    ? raw.id
+    : `${fallback.id}-${index}`;
+  const approvalMode: ApprovalMode = raw?.approvalMode === 'auto_accept' ? 'auto_accept' : 'manual';
+
+  return {
+    id,
+    name: typeof raw?.name === 'string' && raw.name.trim() ? raw.name : fallback.name,
+    provider: typeof raw?.provider === 'string' && raw.provider.trim() ? raw.provider : fallback.provider,
+    llmApiKey: typeof raw?.llmApiKey === 'string' ? raw.llmApiKey : fallback.llmApiKey,
+    llmBaseUrl: typeof raw?.llmBaseUrl === 'string' && raw.llmBaseUrl.trim() ? raw.llmBaseUrl : fallback.llmBaseUrl,
+    llmModel: typeof raw?.llmModel === 'string' && raw.llmModel.trim() ? raw.llmModel : fallback.llmModel,
+    approvalMode,
+    temperature: clampNumber(raw?.temperature, 0, 2, fallback.temperature),
+    maxContextMessages: Math.round(clampNumber(raw?.maxContextMessages, 0, 100, fallback.maxContextMessages)),
+    maxRetries: Math.round(clampNumber(raw?.maxRetries, 0, 5, fallback.maxRetries)),
+    systemPrompt: typeof raw?.systemPrompt === 'string' ? raw.systemPrompt : fallback.systemPrompt,
+  };
+}
+
+function loadLegacyAgentProvider(): LLMProviderConfig | null {
+  try {
+    const saved = localStorage.getItem('xlterm-agent-settings');
+    if (!saved) return null;
+    const parsed = JSON.parse(saved);
+    return normalizeProvider(
+      {
+        ...parsed,
+        id: 'llm-legacy-agent',
+        name: parsed.llmModel ? `Legacy ${parsed.llmModel}` : 'Legacy Agent',
+        provider: 'openai-compatible',
+      },
+      DEFAULT_LLM_PROVIDER,
+      0
+    );
+  } catch {
+    return null;
+  }
+}
+
+function loadLlmProviders(parsed: any): LLMProviderConfig[] {
+  if (Array.isArray(parsed.llmProviders) && parsed.llmProviders.length > 0) {
+    return parsed.llmProviders.map((provider: any, index: number) => (
+      normalizeProvider(provider, DEFAULT_LLM_PROVIDER, index)
+    ));
+  }
+
+  const legacy = loadLegacyAgentProvider();
+  return [legacy || DEFAULT_LLM_PROVIDER];
 }
 
 function loadSettings(): AppSettings {
@@ -109,6 +202,10 @@ function loadSettings(): AppSettings {
       terminalCursorBlink: typeof parsed.terminalCursorBlink === 'boolean'
         ? parsed.terminalCursorBlink
         : DEFAULT_SETTINGS.terminalCursorBlink,
+      llmProviders: loadLlmProviders(parsed),
+      activeLlmProviderId: typeof parsed.activeLlmProviderId === 'string' && parsed.activeLlmProviderId.trim()
+        ? parsed.activeLlmProviderId
+        : loadLlmProviders(parsed)[0].id,
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -267,6 +364,9 @@ export function App(): React.ReactElement {
             terminalOpacity={settings.terminalOpacity}
             terminalFontSize={settings.terminalFontSize}
             terminalCursorBlink={settings.terminalCursorBlink}
+            llmProviders={settings.llmProviders}
+            activeLlmProviderId={settings.activeLlmProviderId}
+            onActiveLlmProviderChange={(id) => handleSettingsChange({ activeLlmProviderId: id })}
           />
         ) : (
           <Welcome onNewConnection={() => { setEditingConnection(null); setShowDialog(true); }} />

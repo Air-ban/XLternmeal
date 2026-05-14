@@ -1,5 +1,5 @@
-import React from 'react';
-import type { AcrylicTone, AppSettings } from '../App';
+import React, { useEffect, useMemo, useState } from 'react';
+import type { AcrylicTone, AppSettings, ApprovalMode, LLMProviderConfig } from '../App';
 
 interface SettingsDialogProps {
   theme: 'dark' | 'light';
@@ -14,6 +14,55 @@ function percent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
+const LLM_PROVIDER_PRESETS = [
+  {
+    id: 'openai',
+    label: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4',
+  },
+  {
+    id: 'deepseek',
+    label: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com/v1',
+    model: 'deepseek-chat',
+  },
+  {
+    id: 'qwen',
+    label: 'Qwen',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    model: 'qwen-plus',
+  },
+  {
+    id: 'ollama',
+    label: 'Ollama',
+    baseUrl: 'http://localhost:11434/v1',
+    model: 'llama3.1',
+  },
+  {
+    id: 'openai-compatible',
+    label: 'OpenAI Compatible',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4',
+  },
+];
+
+function newProvider(): LLMProviderConfig {
+  return {
+    id: `llm-${Date.now()}`,
+    name: 'New LLM',
+    provider: 'openai-compatible',
+    llmApiKey: '',
+    llmBaseUrl: 'https://api.openai.com/v1',
+    llmModel: 'gpt-4',
+    approvalMode: 'manual',
+    temperature: 0.1,
+    maxContextMessages: 20,
+    maxRetries: 3,
+    systemPrompt: '',
+  };
+}
+
 export function SettingsDialog({
   theme,
   settings,
@@ -22,8 +71,66 @@ export function SettingsDialog({
   onResetSettings,
   onClose,
 }: SettingsDialogProps): React.ReactElement {
+  const [selectedProviderId, setSelectedProviderId] = useState(settings.activeLlmProviderId || settings.llmProviders[0]?.id || '');
+
   const setNumber = (key: keyof AppSettings, value: string, scale = 1) => {
     onSettingsChange({ [key]: Number(value) / scale } as Partial<AppSettings>);
+  };
+
+  const selectedProvider = useMemo(() => {
+    return settings.llmProviders.find((provider) => provider.id === selectedProviderId) || settings.llmProviders[0] || null;
+  }, [selectedProviderId, settings.llmProviders]);
+
+  useEffect(() => {
+    if (selectedProvider && selectedProvider.id !== selectedProviderId) {
+      setSelectedProviderId(selectedProvider.id);
+    }
+  }, [selectedProvider, selectedProviderId]);
+
+  const updateProvider = (id: string, patch: Partial<LLMProviderConfig>) => {
+    const llmProviders = settings.llmProviders.map((provider) => (
+      provider.id === id ? { ...provider, ...patch } : provider
+    ));
+    onSettingsChange({ llmProviders });
+  };
+
+  const handleProviderChange = (id: string, nextProvider: string) => {
+    const preset = LLM_PROVIDER_PRESETS.find((item) => item.id === nextProvider);
+    updateProvider(id, {
+      provider: nextProvider,
+      name: preset?.label || 'Custom LLM',
+      llmBaseUrl: preset?.baseUrl || selectedProvider?.llmBaseUrl || '',
+      llmModel: preset?.model || selectedProvider?.llmModel || '',
+    });
+  };
+
+  const addProvider = () => {
+    const provider = newProvider();
+    onSettingsChange({
+      llmProviders: [...settings.llmProviders, provider],
+      activeLlmProviderId: provider.id,
+    });
+    setSelectedProviderId(provider.id);
+  };
+
+  const deleteProvider = (id: string) => {
+    if (settings.llmProviders.length <= 1) {
+      return;
+    }
+    const nextProviders = settings.llmProviders.filter((provider) => provider.id !== id);
+    const nextActiveId = settings.activeLlmProviderId === id
+      ? nextProviders[0].id
+      : settings.activeLlmProviderId;
+    onSettingsChange({
+      llmProviders: nextProviders,
+      activeLlmProviderId: nextActiveId,
+    });
+    setSelectedProviderId(nextActiveId);
+  };
+
+  const makeActiveProvider = (id: string) => {
+    setSelectedProviderId(id);
+    onSettingsChange({ activeLlmProviderId: id });
   };
 
   return (
@@ -161,6 +268,171 @@ export function SettingsDialog({
             </label>
           </section>
 
+          <section className="settings-section">
+            <div className="section-heading-row">
+              <h3>LLM Providers</h3>
+              <button className="secondary-btn compact" type="button" onClick={addProvider}>Add Provider</button>
+            </div>
+
+            <div className="provider-list">
+              {settings.llmProviders.map((provider) => (
+                <button
+                  type="button"
+                  key={provider.id}
+                  className={`provider-item ${selectedProvider?.id === provider.id ? 'active' : ''}`}
+                  onClick={() => makeActiveProvider(provider.id)}
+                >
+                  <strong>{provider.name}</strong>
+                  <span>{provider.llmModel}</span>
+                </button>
+              ))}
+            </div>
+
+            {selectedProvider && (
+              <div className="llm-editor">
+                <div className="setting-row">
+                  <div>
+                    <label>Name</label>
+                    <p>Shown in Agent selector</p>
+                  </div>
+                  <input
+                    value={selectedProvider.name}
+                    onChange={(e) => updateProvider(selectedProvider.id, { name: e.target.value })}
+                  />
+                </div>
+
+                <div className="setting-row">
+                  <div>
+                    <label>Provider</label>
+                    <p>OpenAI-compatible endpoint</p>
+                  </div>
+                  <select
+                    value={selectedProvider.provider}
+                    onChange={(e) => handleProviderChange(selectedProvider.id, e.target.value)}
+                  >
+                    {LLM_PROVIDER_PRESETS.map((preset) => (
+                      <option value={preset.id} key={preset.id}>{preset.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="setting-row">
+                  <div>
+                    <label>Base URL</label>
+                    <p>Chat completions API root</p>
+                  </div>
+                  <input
+                    value={selectedProvider.llmBaseUrl}
+                    onChange={(e) => updateProvider(selectedProvider.id, { llmBaseUrl: e.target.value })}
+                    placeholder="https://api.openai.com/v1"
+                  />
+                </div>
+
+                <div className="setting-row">
+                  <div>
+                    <label>API Key</label>
+                    <p>Stored locally in settings</p>
+                  </div>
+                  <input
+                    type="password"
+                    value={selectedProvider.llmApiKey}
+                    onChange={(e) => updateProvider(selectedProvider.id, { llmApiKey: e.target.value })}
+                    placeholder="sk-..."
+                  />
+                </div>
+
+                <div className="setting-row">
+                  <div>
+                    <label>Model</label>
+                    <p>Used by the SSH Agent</p>
+                  </div>
+                  <input
+                    value={selectedProvider.llmModel}
+                    onChange={(e) => updateProvider(selectedProvider.id, { llmModel: e.target.value })}
+                    placeholder="gpt-4"
+                  />
+                </div>
+
+                <div className="setting-row">
+                  <div>
+                    <label>Approval</label>
+                    <p>Dangerous commands still require approval</p>
+                  </div>
+                  <select
+                    value={selectedProvider.approvalMode}
+                    onChange={(e) => updateProvider(selectedProvider.id, { approvalMode: e.target.value as ApprovalMode })}
+                  >
+                    <option value="manual">Manual</option>
+                    <option value="auto_accept">Auto accept low risk</option>
+                  </select>
+                </div>
+
+                <div className="setting-grid-row">
+                  <div className="mini-field">
+                    <label>Temperature</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="2"
+                      step="0.1"
+                      value={selectedProvider.temperature}
+                      onChange={(e) => updateProvider(selectedProvider.id, { temperature: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="mini-field">
+                    <label>Context</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={selectedProvider.maxContextMessages}
+                      onChange={(e) => updateProvider(selectedProvider.id, { maxContextMessages: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="mini-field">
+                    <label>Retries</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="5"
+                      step="1"
+                      value={selectedProvider.maxRetries}
+                      onChange={(e) => updateProvider(selectedProvider.id, { maxRetries: Number(e.target.value) })}
+                    />
+                  </div>
+                </div>
+
+                <label className="system-prompt-field">
+                  <span>System Prompt</span>
+                  <textarea
+                    value={selectedProvider.systemPrompt}
+                    onChange={(e) => updateProvider(selectedProvider.id, { systemPrompt: e.target.value })}
+                    placeholder="Optional operating rules for this LLM..."
+                  />
+                </label>
+
+                <div className="provider-actions">
+                  <button
+                    className="secondary-btn"
+                    type="button"
+                    onClick={() => makeActiveProvider(selectedProvider.id)}
+                  >
+                    Use in Agent
+                  </button>
+                  <button
+                    className="secondary-btn danger"
+                    type="button"
+                    onClick={() => deleteProvider(selectedProvider.id)}
+                    disabled={settings.llmProviders.length <= 1}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+
           <div className="settings-footer">
             <button className="secondary-btn" onClick={onResetSettings}>重置</button>
             <button className="primary-btn" onClick={onClose}>应用</button>
@@ -193,7 +465,7 @@ export function SettingsDialog({
         }
 
         .settings-dialog {
-          width: min(560px, calc(100vw - 32px));
+          width: min(680px, calc(100vw - 32px));
           max-height: calc(100vh - 72px);
           border-radius: 12px;
           color: var(--text-primary);
@@ -260,6 +532,18 @@ export function SettingsDialog({
           letter-spacing: 0.4px;
         }
 
+        .section-heading-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+
+        .section-heading-row h3 {
+          margin-bottom: 0;
+        }
+
         .setting-row {
           display: grid;
           grid-template-columns: 150px minmax(0, 1fr);
@@ -294,6 +578,7 @@ export function SettingsDialog({
           accent-color: var(--accent);
         }
 
+        .setting-row input:not([type="range"]),
         .setting-row select {
           width: 100%;
           height: 34px;
@@ -302,6 +587,124 @@ export function SettingsDialog({
           border-radius: var(--radius-sm);
           background: var(--solid-surface-2);
           color: var(--text-primary);
+        }
+
+        .setting-row input:focus,
+        .setting-row select:focus {
+          border-color: var(--accent);
+          box-shadow: 0 0 0 2px var(--accent-subtle);
+        }
+
+        .provider-list {
+          display: flex;
+          gap: 8px;
+          overflow-x: auto;
+          padding-bottom: 8px;
+          margin-bottom: 12px;
+        }
+
+        .provider-item {
+          min-width: 150px;
+          max-width: 210px;
+          padding: 9px 10px;
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-sm);
+          background: var(--solid-surface-2);
+          color: var(--text-primary);
+          cursor: pointer;
+          text-align: left;
+        }
+
+        .provider-item.active {
+          border-color: rgba(88, 166, 255, 0.36);
+          background: var(--accent-subtle);
+        }
+
+        .provider-item strong,
+        .provider-item span {
+          display: block;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .provider-item strong {
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .provider-item span {
+          margin-top: 3px;
+          color: var(--text-muted);
+          font-size: 11px;
+        }
+
+        .llm-editor {
+          padding-top: 2px;
+        }
+
+        .setting-grid-row {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+          margin-bottom: 12px;
+        }
+
+        .mini-field {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .mini-field label,
+        .system-prompt-field span {
+          color: var(--text-muted);
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.4px;
+          text-transform: uppercase;
+        }
+
+        .mini-field input,
+        .system-prompt-field textarea {
+          width: 100%;
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-sm);
+          background: var(--solid-surface-2);
+          color: var(--text-primary);
+          font-size: 12px;
+        }
+
+        .mini-field input {
+          height: 34px;
+          padding: 0 10px;
+        }
+
+        .system-prompt-field {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          margin-top: 4px;
+        }
+
+        .system-prompt-field textarea {
+          min-height: 96px;
+          padding: 10px;
+          resize: vertical;
+          line-height: 1.45;
+        }
+
+        .mini-field input:focus,
+        .system-prompt-field textarea:focus {
+          border-color: var(--accent);
+          box-shadow: 0 0 0 2px var(--accent-subtle);
+        }
+
+        .provider-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 10px;
+          margin-top: 12px;
         }
 
         .segmented {
@@ -363,6 +766,24 @@ export function SettingsDialog({
         .secondary-btn:hover {
           border-color: var(--accent);
           color: var(--accent);
+        }
+
+        .secondary-btn.compact {
+          padding: 6px 10px;
+        }
+
+        .secondary-btn.danger {
+          color: var(--danger);
+        }
+
+        .secondary-btn:disabled {
+          opacity: 0.48;
+          cursor: default;
+        }
+
+        .secondary-btn:disabled:hover {
+          border-color: var(--border-color);
+          color: var(--text-primary);
         }
 
         .primary-btn {

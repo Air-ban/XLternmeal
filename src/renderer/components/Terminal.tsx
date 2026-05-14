@@ -3,6 +3,8 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SFTPPanel } from './SFTPPanel';
 import { PortForwardPanel } from './PortForwardPanel';
+import { AgentPanel } from './AgentPanel';
+import type { LLMProviderConfig } from '../App';
 
 declare global {
   interface Window {
@@ -39,6 +41,13 @@ declare global {
         start: (config: any) => Promise<{ success: boolean; forward?: any; error?: string }>;
         stop: (id: string) => Promise<{ success: boolean; error?: string }>;
       };
+      agent: {
+        createPlan: (request: any) => Promise<{ success: boolean; plan?: any; context?: any[]; error?: string }>;
+        executePlan: (request: any) => Promise<{ success: boolean; result?: any; plan?: any; context?: any[]; error?: string }>;
+        getContext: (sessionId: string) => Promise<{ success: boolean; context?: any[]; error?: string }>;
+        clearContext: (sessionId: string) => Promise<{ success: boolean; error?: string }>;
+        onStatus: (requestId: string, callback: (event: { status: string; detail: string }) => void) => () => void;
+      };
     };
   }
 }
@@ -66,10 +75,13 @@ interface TerminalProps {
   terminalOpacity: number;
   terminalFontSize: number;
   terminalCursorBlink: boolean;
+  llmProviders: LLMProviderConfig[];
+  activeLlmProviderId: string;
+  onActiveLlmProviderChange: (id: string) => void;
 }
 
 type TerminalStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
-type ToolView = 'terminal' | 'sftp' | 'forward';
+type ToolView = 'terminal' | 'agent' | 'sftp' | 'forward';
 
 function getTerminalTheme(theme: 'dark' | 'light', terminalOpacity: number) {
   const terminalAlpha = Math.max(0.45, Math.min(0.95, terminalOpacity)).toFixed(3);
@@ -130,6 +142,9 @@ export function Terminal({
   terminalOpacity,
   terminalFontSize,
   terminalCursorBlink,
+  llmProviders,
+  activeLlmProviderId,
+  onActiveLlmProviderChange,
 }: TerminalProps): React.ReactElement {
   const [statuses, setStatuses] = useState<Record<string, TerminalStatus>>({});
   const [activeView, setActiveView] = useState<ToolView>('terminal');
@@ -178,6 +193,12 @@ export function Terminal({
           Terminal
         </button>
         <button
+          className={`tool-tab ${activeView === 'agent' ? 'active' : ''}`}
+          onClick={() => setActiveView('agent')}
+        >
+          AI Agent
+        </button>
+        <button
           className={`tool-tab ${activeView === 'sftp' ? 'active' : ''}`}
           onClick={() => setActiveView('sftp')}
         >
@@ -203,6 +224,14 @@ export function Terminal({
             onStatusChange={handleStatusChange}
           />
         ))}
+        {activeView === 'agent' && (
+          <AgentPanel
+            sessionId={activeTabId}
+            llmProviders={llmProviders}
+            activeLlmProviderId={activeLlmProviderId}
+            onActiveLlmProviderChange={onActiveLlmProviderChange}
+          />
+        )}
         {activeView === 'sftp' && <SFTPPanel sessionId={activeTabId} />}
         {activeView === 'forward' && <PortForwardPanel sessionId={activeTabId} />}
       </div>
