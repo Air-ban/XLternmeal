@@ -29,6 +29,9 @@
   --acrylic-border: rgba(255, 255, 255, 0.14);
   --acrylic-highlight: rgba(255, 255, 255, 0.08);
   --acrylic-shadow: 0 18px 60px rgba(0, 0, 0, 0.34);
+  --acrylic-noise-opacity: 0.045;
+  --acrylic-solid-alpha: 0.94;
+  --acrylic-control-alpha: var(--acrylic-opacity);
   --text-primary: #e6edf3;
   --text-secondary: #8b949e;
   --text-muted: #6e7681;
@@ -79,6 +82,9 @@
   --acrylic-border: rgba(255, 255, 255, 0.44);
   --acrylic-highlight: rgba(255, 255, 255, 0.7);
   --acrylic-shadow: 0 18px 60px rgba(31, 35, 40, 0.18);
+  --acrylic-noise-opacity: 0.045;
+  --acrylic-solid-alpha: 0.96;
+  --acrylic-control-alpha: var(--acrylic-opacity);
   --text-primary: #1f2328;
   --text-secondary: #656d76;
   --text-muted: #8c959f;
@@ -146,7 +152,7 @@ input, button, select, textarea, optgroup, fieldset {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background: rgba(var(--acrylic-tint-rgb), var(--acrylic-opacity));
+  background: rgba(var(--acrylic-tint-rgb), var(--acrylic-control-alpha));
   border: 1px solid var(--acrylic-border);
   box-shadow: var(--acrylic-shadow);
   backdrop-filter: blur(var(--acrylic-blur)) saturate(var(--acrylic-saturation));
@@ -159,9 +165,35 @@ input, button, select, textarea, optgroup, fieldset {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  opacity: 0.045;
+  opacity: var(--acrylic-noise-opacity);
   background-image:
     repeating-radial-gradient(circle at 0 0, rgba(255, 255, 255, 0.9) 0 1px, transparent 1px 3px);
+}
+
+[data-acrylic="off"] {
+  --acrylic-control-alpha: var(--acrylic-solid-alpha);
+  --acrylic-noise-opacity: 0;
+  --acrylic-shadow: var(--shadow-sm);
+}
+
+[data-acrylic="off"] .acrylic,
+[data-acrylic="off"] .tab-bar,
+[data-acrylic="off"] .tool-switcher,
+[data-acrylic="off"] .terminal-error,
+[data-acrylic="off"] .settings-overlay,
+[data-acrylic="off"] .dialog-overlay,
+[data-acrylic="off"] .onboarding {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+[data-acrylic="off"] .acrylic {
+  background: rgba(var(--acrylic-tint-rgb), var(--acrylic-solid-alpha)) !important;
+}
+
+[data-acrylic="off"] .tab-bar,
+[data-acrylic="off"] .tool-switcher {
+  background: var(--solid-surface) !important;
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {

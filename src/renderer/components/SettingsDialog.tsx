@@ -14,6 +14,18 @@ function percent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
+function px(value: number): string {
+  return `${Number.isInteger(value) ? value : value.toFixed(1)}px`;
+}
+
+function fontSizeValue(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function clampTerminalFontSize(value: number): number {
+  return Math.max(8, Math.min(48, value));
+}
+
 const LLM_PROVIDER_PRESETS = [
   {
     id: 'openai',
@@ -71,9 +83,40 @@ export function SettingsDialog({
   onClose,
 }: SettingsDialogProps): React.ReactElement {
   const [selectedProviderId, setSelectedProviderId] = useState(settings.activeLlmProviderId || settings.llmProviders[0]?.id || '');
+  const [terminalFontSizeInput, setTerminalFontSizeInput] = useState(() => fontSizeValue(settings.terminalFontSize));
 
   const setNumber = (key: keyof AppSettings, value: string, scale = 1) => {
     onSettingsChange({ [key]: Number(value) / scale } as Partial<AppSettings>);
+  };
+
+  const setTerminalFontSize = (value: string) => {
+    const nextValue = Number(value);
+    if (!Number.isFinite(nextValue)) {
+      return;
+    }
+
+    onSettingsChange({
+      terminalFontSize: clampTerminalFontSize(nextValue),
+    });
+  };
+
+  const handleTerminalFontSizeInput = (value: string) => {
+    setTerminalFontSizeInput(value);
+
+    const nextValue = Number(value);
+    if (Number.isFinite(nextValue) && nextValue >= 8 && nextValue <= 48) {
+      onSettingsChange({ terminalFontSize: nextValue });
+    }
+  };
+
+  const commitTerminalFontSizeInput = () => {
+    const nextValue = Number(terminalFontSizeInput);
+    const normalizedValue = Number.isFinite(nextValue)
+      ? clampTerminalFontSize(nextValue)
+      : settings.terminalFontSize;
+
+    onSettingsChange({ terminalFontSize: normalizedValue });
+    setTerminalFontSizeInput(fontSizeValue(normalizedValue));
   };
 
   const selectedProvider = useMemo(() => {
@@ -85,6 +128,10 @@ export function SettingsDialog({
       setSelectedProviderId(selectedProvider.id);
     }
   }, [selectedProvider, selectedProviderId]);
+
+  useEffect(() => {
+    setTerminalFontSizeInput(fontSizeValue(settings.terminalFontSize));
+  }, [settings.terminalFontSize]);
 
   const updateProvider = (id: string, patch: Partial<LLMProviderConfig>) => {
     const llmProviders = settings.llmProviders.map((provider) => (
@@ -161,12 +208,25 @@ export function SettingsDialog({
               </div>
             </div>
 
-            <div className="setting-row">
+            <label className="check-row material-toggle">
+              <span>
+                <strong>Acrylic 材质</strong>
+                <small>{settings.acrylicEnabled ? '使用 Windows Acrylic 背景和模糊层' : '关闭，使用实体背景'}</small>
+              </span>
+              <input
+                type="checkbox"
+                checked={settings.acrylicEnabled}
+                onChange={(e) => onSettingsChange({ acrylicEnabled: e.target.checked })}
+              />
+            </label>
+
+            <div className={`setting-row ${settings.acrylicEnabled ? '' : 'disabled'}`}>
               <div>
                 <label>Acrylic 色调</label>
                 <p>{settings.acrylicTone === 'auto' ? '跟随主题' : settings.acrylicTone === 'dark' ? '深色' : '浅色'}</p>
               </div>
               <select
+                disabled={!settings.acrylicEnabled}
                 value={settings.acrylicTone}
                 onChange={(e) => onSettingsChange({ acrylicTone: e.target.value as AcrylicTone })}
               >
@@ -176,13 +236,14 @@ export function SettingsDialog({
               </select>
             </div>
 
-            <div className="setting-row">
+            <div className={`setting-row ${settings.acrylicEnabled ? '' : 'disabled'}`}>
               <div>
                 <label>Acrylic 不透明度</label>
                 <p>{percent(settings.acrylicOpacity)}</p>
               </div>
               <input
                 type="range"
+                disabled={!settings.acrylicEnabled}
                 min="20"
                 max="85"
                 step="1"
@@ -191,13 +252,14 @@ export function SettingsDialog({
               />
             </div>
 
-            <div className="setting-row">
+            <div className={`setting-row ${settings.acrylicEnabled ? '' : 'disabled'}`}>
               <div>
                 <label>模糊强度</label>
                 <p>{settings.acrylicBlur}px</p>
               </div>
               <input
                 type="range"
+                disabled={!settings.acrylicEnabled}
                 min="12"
                 max="48"
                 step="1"
@@ -206,13 +268,14 @@ export function SettingsDialog({
               />
             </div>
 
-            <div className="setting-row">
+            <div className={`setting-row ${settings.acrylicEnabled ? '' : 'disabled'}`}>
               <div>
                 <label>工作区底色</label>
                 <p>{percent(settings.workspaceTint)}</p>
               </div>
               <input
                 type="range"
+                disabled={!settings.acrylicEnabled}
                 min="0"
                 max="35"
                 step="1"
@@ -242,16 +305,33 @@ export function SettingsDialog({
             <div className="setting-row">
               <div>
                 <label>字号</label>
-                <p>{settings.terminalFontSize}px</p>
+                <p>{px(settings.terminalFontSize)}</p>
               </div>
-              <input
-                type="range"
-                min="12"
-                max="20"
-                step="1"
-                value={settings.terminalFontSize}
-                onChange={(e) => setNumber('terminalFontSize', e.target.value)}
-              />
+              <div className="range-with-input">
+                <input
+                  type="range"
+                  min="8"
+                  max="48"
+                  step="0.5"
+                  value={settings.terminalFontSize}
+                  onChange={(e) => setTerminalFontSize(e.target.value)}
+                />
+                <input
+                  className="number-input"
+                  type="number"
+                  min="8"
+                  max="48"
+                  step="0.5"
+                  value={terminalFontSizeInput}
+                  onChange={(e) => handleTerminalFontSizeInput(e.target.value)}
+                  onBlur={commitTerminalFontSizeInput}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur();
+                    }
+                  }}
+                />
+              </div>
             </div>
 
             <label className="check-row">
@@ -547,6 +627,10 @@ export function SettingsDialog({
           margin-bottom: 0;
         }
 
+        .setting-row.disabled {
+          opacity: 0.5;
+        }
+
         .setting-row label,
         .check-row strong {
           display: block;
@@ -566,6 +650,24 @@ export function SettingsDialog({
         .setting-row input[type="range"] {
           width: 100%;
           accent-color: var(--accent);
+        }
+
+        .range-with-input {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 72px;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .range-with-input .number-input {
+          width: 72px;
+          text-align: right;
+        }
+
+        .setting-row input:disabled,
+        .setting-row select:disabled {
+          cursor: not-allowed;
+          opacity: 0.72;
         }
 
         .setting-row input:not([type="range"]),
@@ -710,6 +812,10 @@ export function SettingsDialog({
           justify-content: space-between;
           gap: 18px;
           cursor: pointer;
+        }
+
+        .material-toggle {
+          margin-bottom: 10px;
         }
 
         .check-row input {

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { SFTPPanel } from './SFTPPanel';
 import { PortForwardPanel } from './PortForwardPanel';
 import { AgentPanel } from './AgentPanel';
@@ -14,11 +15,16 @@ declare global {
         set: (theme: 'dark' | 'light') => Promise<'dark' | 'light'>;
         onChange: (callback: (theme: 'dark' | 'light') => void) => () => void;
       };
+      appearance: {
+        getAcrylicEnabled: () => Promise<boolean>;
+        setAcrylicEnabled: (enabled: boolean) => Promise<boolean>;
+      };
       window: {
-        minimize: () => Promise<void>;
+        minimize: () => Promise<boolean>;
         toggleMaximize: () => Promise<boolean>;
-        close: () => Promise<void>;
+        close: () => Promise<boolean>;
         isMaximized: () => Promise<boolean>;
+        onMaximizedChange: (callback: (isMaximized: boolean) => void) => () => void;
       };
       ssh: {
         connect: (config: any) => Promise<{ success: boolean; error?: string }>;
@@ -429,6 +435,33 @@ interface TerminalSessionProps {
   onStatusChange: (id: string, status: TerminalStatus) => void;
 }
 
+const TERMINAL_FONT_FAMILY = [
+  '"Cascadia Mono"',
+  '"Cascadia Code"',
+  '"CaskaydiaCove Nerd Font"',
+  '"CaskaydiaMono Nerd Font"',
+  '"JetBrainsMono Nerd Font"',
+  '"FiraCode Nerd Font"',
+  '"Hack Nerd Font"',
+  '"UbuntuMono Nerd Font"',
+  '"Symbols Nerd Font Mono"',
+  '"MesloLGS NF"',
+  '"DejaVu Sans Mono"',
+  '"Noto Sans Mono"',
+  '"Noto Sans Mono CJK SC"',
+  '"Noto Color Emoji"',
+  '"Microsoft YaHei UI"',
+  '"Microsoft YaHei"',
+  '"Microsoft JhengHei UI"',
+  '"Malgun Gothic"',
+  '"Yu Gothic UI"',
+  '"Segoe UI Symbol"',
+  '"Segoe UI Emoji"',
+  'Consolas',
+  '"Courier New"',
+  'monospace',
+].join(', ');
+
 function TerminalSession({
   connection,
   active,
@@ -464,14 +497,19 @@ function TerminalSession({
         cursorBlink: terminalCursorBlink,
         cursorStyle: 'bar',
         fontSize: terminalFontSize,
-        fontFamily: '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, "Courier New", monospace',
+        fontFamily: TERMINAL_FONT_FAMILY,
+        letterSpacing: 0,
+        lineHeight: 1.18,
         theme: getTerminalTheme(theme, terminalOpacity),
         allowProposedApi: true,
         scrollback: 5000,
       });
 
       const fitAddon = new FitAddon();
+      const unicode11Addon = new Unicode11Addon();
       term.loadAddon(fitAddon);
+      term.loadAddon(unicode11Addon);
+      term.unicode.activeVersion = '11';
       term.open(container);
       fitAddon.fit();
 

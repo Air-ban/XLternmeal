@@ -10,11 +10,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('theme:changed', listener);
     },
   },
+  appearance: {
+    getAcrylicEnabled: () => ipcRenderer.invoke('appearance:get-acrylic-enabled'),
+    setAcrylicEnabled: (enabled: boolean) => ipcRenderer.invoke('appearance:set-acrylic-enabled', enabled),
+  },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),
     toggleMaximize: () => ipcRenderer.invoke('window:toggle-maximize'),
     close: () => ipcRenderer.invoke('window:close'),
     isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
+    onMaximizedChange: (callback: (isMaximized: boolean) => void) => {
+      const listener = (_event: any, isMaximized: boolean) => callback(Boolean(isMaximized));
+      ipcRenderer.on('window:maximized-changed', listener);
+      return () => ipcRenderer.removeListener('window:maximized-changed', listener);
+    },
   },
   ssh: {
     connect: (config: any) => ipcRenderer.invoke('ssh:connect', config),

@@ -15,11 +15,16 @@ declare global {
         set: (theme: 'dark' | 'light') => Promise<'dark' | 'light'>;
         onChange: (callback: (theme: 'dark' | 'light') => void) => () => void;
       };
+      appearance: {
+        getAcrylicEnabled: () => Promise<boolean>;
+        setAcrylicEnabled: (enabled: boolean) => Promise<boolean>;
+      };
       window: {
-        minimize: () => Promise<void>;
+        minimize: () => Promise<boolean>;
         toggleMaximize: () => Promise<boolean>;
-        close: () => Promise<void>;
+        close: () => Promise<boolean>;
         isMaximized: () => Promise<boolean>;
+        onMaximizedChange: (callback: (isMaximized: boolean) => void) => () => void;
       };
       ssh: {
         connect: (config: any) => Promise<{ success: boolean; error?: string }>;
@@ -85,6 +90,7 @@ export interface LLMProviderConfig {
 }
 
 export interface AppSettings {
+  acrylicEnabled: boolean;
   acrylicOpacity: number;
   workspaceTint: number;
   terminalOpacity: number;
@@ -110,6 +116,7 @@ const DEFAULT_LLM_PROVIDER: LLMProviderConfig = {
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
+  acrylicEnabled: true,
   acrylicOpacity: 0.55,
   workspaceTint: 0,
   terminalOpacity: 0.72,
@@ -190,12 +197,15 @@ function loadSettings(): AppSettings {
       : DEFAULT_SETTINGS.acrylicTone;
 
     return {
+      acrylicEnabled: typeof parsed.acrylicEnabled === 'boolean'
+        ? parsed.acrylicEnabled
+        : DEFAULT_SETTINGS.acrylicEnabled,
       acrylicOpacity: clampNumber(parsed.acrylicOpacity, 0.2, 0.85, clampNumber(fallbackOpacity, 0.2, 0.85, DEFAULT_SETTINGS.acrylicOpacity)),
       workspaceTint: clampNumber(parsed.workspaceTint, 0, 0.35, DEFAULT_SETTINGS.workspaceTint),
       terminalOpacity: clampNumber(parsed.terminalOpacity, 0.45, 0.95, DEFAULT_SETTINGS.terminalOpacity),
       acrylicBlur: clampNumber(parsed.acrylicBlur, 12, 48, DEFAULT_SETTINGS.acrylicBlur),
       acrylicTone: tone,
-      terminalFontSize: clampNumber(parsed.terminalFontSize, 12, 20, DEFAULT_SETTINGS.terminalFontSize),
+      terminalFontSize: clampNumber(parsed.terminalFontSize, 8, 48, DEFAULT_SETTINGS.terminalFontSize),
       terminalCursorBlink: typeof parsed.terminalCursorBlink === 'boolean'
         ? parsed.terminalCursorBlink
         : DEFAULT_SETTINGS.terminalCursorBlink,
@@ -252,25 +262,34 @@ export function App(): React.ReactElement {
 
   useEffect(() => {
     const root = document.documentElement;
+    const acrylicEnabled = settings.acrylicEnabled;
     const tone = settings.acrylicTone === 'auto' ? theme : settings.acrylicTone;
     const acrylicTintRgb = tone === 'dark' ? '24 28 36' : '245 248 252';
     const workspaceTintRgb = tone === 'dark' ? '11 16 24' : '247 250 252';
     const solidRgb = tone === 'dark' ? '13, 17, 23' : '255, 255, 255';
     const solidRgb2 = tone === 'dark' ? '22, 27, 34' : '246, 248, 250';
-    const solidAlpha = tone === 'dark' ? 0.68 : 0.7;
-    const solidAlpha2 = tone === 'dark' ? 0.62 : 0.66;
+    const solidAlpha = acrylicEnabled ? (tone === 'dark' ? 0.68 : 0.7) : (tone === 'dark' ? 0.96 : 0.98);
+    const solidAlpha2 = acrylicEnabled ? (tone === 'dark' ? 0.62 : 0.66) : (tone === 'dark' ? 0.9 : 0.94);
+    const appBackdropAlpha = acrylicEnabled ? settings.workspaceTint : 1;
 
+    root.dataset.acrylic = acrylicEnabled ? 'on' : 'off';
     root.style.setProperty('--acrylic-tint-rgb', acrylicTintRgb);
     root.style.setProperty('--acrylic-opacity', settings.acrylicOpacity.toFixed(3));
     root.style.setProperty('--acrylic-blur', `${settings.acrylicBlur}px`);
-    root.style.setProperty('--app-backdrop', `rgba(${workspaceTintRgb.replaceAll(' ', ', ')}, ${settings.workspaceTint.toFixed(3)})`);
-    root.style.setProperty('--main-area-opacity', Math.min(0.28, settings.workspaceTint).toFixed(3));
+    root.style.setProperty('--app-backdrop', `rgba(${workspaceTintRgb.replaceAll(' ', ', ')}, ${appBackdropAlpha.toFixed(3)})`);
+    root.style.setProperty('--main-area-opacity', acrylicEnabled ? Math.min(0.28, settings.workspaceTint).toFixed(3) : '0');
     root.style.setProperty('--terminal-alpha', settings.terminalOpacity.toFixed(3));
     root.style.setProperty('--terminal-panel-alpha', Math.max(0.08, settings.terminalOpacity - 0.26).toFixed(3));
     root.style.setProperty('--solid-surface', `rgba(${solidRgb}, ${solidAlpha})`);
     root.style.setProperty('--solid-surface-2', `rgba(${solidRgb2}, ${solidAlpha2})`);
     localStorage.setItem('xlterm-settings', JSON.stringify(settings));
   }, [theme, settings]);
+
+  useEffect(() => {
+    window.electronAPI.appearance.setAcrylicEnabled(settings.acrylicEnabled).catch((error) => {
+      console.error('Failed to update native acrylic material', error);
+    });
+  }, [settings.acrylicEnabled]);
 
   const handleConnect = useCallback((connection: Connection) => {
     const existing = savedConnections.find(c => c.id === connection.id);

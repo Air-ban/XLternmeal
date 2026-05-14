@@ -1,17 +1,23 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme } from 'electron';
+import type { IpcMainInvokeEvent } from 'electron';
 import * as path from 'path';
 import { SSHManager } from './ssh';
 import { AgentManager } from './agent';
 
 let mainWindow: BrowserWindow | null = null;
+let acrylicEnabled = true;
 const sshManager = new SSHManager();
 const agentManager = new AgentManager(sshManager);
 
 nativeTheme.themeSource = 'system';
 Menu.setApplicationMenu(null);
 
+function getSolidBackgroundColor(): string {
+  return nativeTheme.shouldUseDarkColors ? '#0b1018' : '#f7fafc';
+}
+
 function getBackgroundColor(): string {
-  return '#00000000';
+  return acrylicEnabled ? '#00000000' : getSolidBackgroundColor();
 }
 
 function joinRemotePath(basePath: string, name: string): string {
@@ -24,6 +30,80 @@ function joinRemotePath(basePath: string, name: string): string {
 
 function isValidPort(port: number): boolean {
   return Number.isInteger(port) && port >= 0 && port <= 65535;
+}
+
+function resolveWindow(event?: IpcMainInvokeEvent): BrowserWindow | null {
+  const eventWindow = event ? BrowserWindow.fromWebContents(event.sender) : null;
+  if (eventWindow && !eventWindow.isDestroyed()) {
+    return eventWindow;
+  }
+
+  return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+}
+
+function sendWindowMaximizedState(window: BrowserWindow | null = mainWindow): void {
+  if (!window || window.isDestroyed() || window.webContents.isDestroyed()) {
+    return;
+  }
+
+  window.webContents.send('window:maximized-changed', window.isMaximized());
+}
+
+function refreshWindowsAcrylicComposition(window: BrowserWindow): void {
+  if (process.platform !== 'win32' || !acrylicEnabled || window.isDestroyed()) {
+    return;
+  }
+
+  window.setBackgroundMaterial('none');
+  window.setBackgroundMaterial('acrylic');
+  window.setOpacity(0.995);
+
+  const restoreOpacity = () => {
+    if (!window.isDestroyed()) {
+      window.setOpacity(1);
+    }
+  };
+
+  if (window.isMaximized() || window.isFullScreen() || window.isMinimized()) {
+    setTimeout(restoreOpacity, 80);
+    return;
+  }
+
+  const bounds = window.getBounds();
+  window.setBounds({ ...bounds, width: bounds.width + 1 }, false);
+
+  setTimeout(() => {
+    if (window.isDestroyed()) {
+      return;
+    }
+
+    if (!window.isMaximized() && !window.isFullScreen() && !window.isMinimized()) {
+      window.setBounds(bounds, false);
+    }
+
+    restoreOpacity();
+  }, 40);
+}
+
+function applyWindowAppearance(
+  window: BrowserWindow | null = mainWindow,
+  options: { refreshComposition?: boolean } = {}
+): void {
+  if (!window || window.isDestroyed()) {
+    return;
+  }
+
+  window.setBackgroundColor(getBackgroundColor());
+
+  if (process.platform !== 'win32') {
+    return;
+  }
+
+  window.setBackgroundMaterial(acrylicEnabled ? 'acrylic' : 'none');
+
+  if (options.refreshComposition && acrylicEnabled) {
+    refreshWindowsAcrylicComposition(window);
+  }
 }
 
 function createWindow(): void {
@@ -45,7 +125,7 @@ function createWindow(): void {
       nodeIntegration: false,
     },
     ...(isWin ? {
-      backgroundMaterial: 'acrylic',
+      backgroundMaterial: acrylicEnabled ? 'acrylic' : 'none',
       frame: false,
       autoHideMenuBar: true,
     } : {
@@ -61,20 +141,22 @@ function createWindow(): void {
     mainWindow?.setTitle('');
   });
 
+  mainWindow.on('maximize', () => sendWindowMaximizedState(mainWindow));
+  mainWindow.on('unmaximize', () => sendWindowMaximizedState(mainWindow));
+  mainWindow.on('restore', () => sendWindowMaximizedState(mainWindow));
+
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
   mainWindow.once('ready-to-show', () => {
+    applyWindowAppearance(mainWindow);
     mainWindow?.show();
 
-    // Force DWM to recomposite the transparent window so backdrop-filter
-    // blur engages immediately — otherwise it stays inert until a resize.
-    if (process.platform === 'win32') {
-      mainWindow?.setBackgroundMaterial('acrylic');
-      mainWindow?.setOpacity(0.999);
-      setTimeout(() => mainWindow?.setOpacity(1), 60);
-    }
-
     mainWindow?.webContents.send('theme:changed', isDark ? 'dark' : 'light');
+    sendWindowMaximizedState(mainWindow);
+
+    if (mainWindow) {
+      setTimeout(() => applyWindowAppearance(mainWindow, { refreshComposition: true }), 80);
+    }
   });
 
   mainWindow.on('closed', () => {
@@ -95,13 +177,7 @@ ipcMain.handle('theme:set', (_event, theme: 'dark' | 'light') => {
 
   nativeTheme.themeSource = theme;
 
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.setBackgroundColor(getBackgroundColor());
-
-    if (process.platform === 'win32') {
-      mainWindow.setBackgroundMaterial('acrylic');
-    }
-  }
+  applyWindowAppearance(mainWindow, { refreshComposition: true });
 
   return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
 });
@@ -111,45 +187,52 @@ nativeTheme.on('updated', () => {
   const theme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('theme:changed', theme);
-
-    // Update title bar overlay on Windows
-    if (process.platform === 'win32') {
-      mainWindow.setBackgroundMaterial('acrylic');
-    }
+    applyWindowAppearance(mainWindow, { refreshComposition: true });
   }
 });
 
-ipcMain.handle('window:minimize', () => {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (!mainWindow.isFocused()) {
-    mainWindow.focus();
-  }
-  mainWindow.minimize();
+ipcMain.handle('appearance:set-acrylic-enabled', (event, enabled: boolean) => {
+  acrylicEnabled = enabled !== false;
+  applyWindowAppearance(resolveWindow(event), { refreshComposition: true });
+  return acrylicEnabled;
 });
 
-ipcMain.handle('window:toggle-maximize', () => {
-  if (!mainWindow || mainWindow.isDestroyed()) return false;
+ipcMain.handle('appearance:get-acrylic-enabled', () => {
+  return acrylicEnabled;
+});
 
-  if (!mainWindow.isFocused()) {
-    mainWindow.focus();
-  }
+ipcMain.handle('window:minimize', (event) => {
+  const targetWindow = resolveWindow(event);
+  if (!targetWindow) return false;
 
-  if (mainWindow.isMaximized()) {
-    mainWindow.unmaximize();
+  targetWindow.minimize();
+  return true;
+});
+
+ipcMain.handle('window:toggle-maximize', (event) => {
+  const targetWindow = resolveWindow(event);
+  if (!targetWindow) return false;
+
+  if (targetWindow.isMaximized()) {
+    targetWindow.unmaximize();
   } else {
-    mainWindow.maximize();
+    targetWindow.maximize();
   }
 
-  return mainWindow.isMaximized();
+  sendWindowMaximizedState(targetWindow);
+  return targetWindow.isMaximized();
 });
 
-ipcMain.handle('window:close', () => {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  mainWindow.close();
+ipcMain.handle('window:close', (event) => {
+  const targetWindow = resolveWindow(event);
+  if (!targetWindow) return false;
+
+  targetWindow.close();
+  return true;
 });
 
-ipcMain.handle('window:is-maximized', () => {
-  return mainWindow?.isMaximized() ?? false;
+ipcMain.handle('window:is-maximized', (event) => {
+  return resolveWindow(event)?.isMaximized() ?? false;
 });
 
 // SSH IPC handlers
