@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
 interface TitleBarProps {
+  mode: 'ssh' | 'code';
+  onToggleMode: () => void;
   onOpenSettings: () => void;
 }
 
-export function TitleBar({ onOpenSettings }: TitleBarProps): React.ReactElement {
+export function TitleBar({ mode, onToggleMode, onOpenSettings }: TitleBarProps): React.ReactElement {
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
@@ -51,6 +53,10 @@ export function TitleBar({ onOpenSettings }: TitleBarProps): React.ReactElement 
     });
   }, []);
 
+  const handleModeToggle = useCallback(() => {
+    onToggleMode();
+  }, [onToggleMode]);
+
   const stopWindowControlPointer = (event: React.PointerEvent<HTMLButtonElement>) => {
     event.stopPropagation();
   };
@@ -63,6 +69,30 @@ export function TitleBar({ onOpenSettings }: TitleBarProps): React.ReactElement 
           <path d="M7 10l7-4 7 4M7 14l7-4 7 4M7 18l7-4 7 4" stroke="var(--accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <span>XLterm</span>
+      </div>
+
+      <div className={`mode-switch ${mode === 'code' ? 'code' : 'ssh'}`}>
+        <div className={`mode-switch-indicator ${mode === 'code' ? 'code' : 'ssh'}`} />
+        <button
+          type="button"
+          className={`mode-option ${mode === 'ssh' ? 'active' : ''}`}
+          onClick={handleModeToggle}
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="mode-icon">
+            <path d="M2 4h12M2 8h12M2 12h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+          <span>SSH</span>
+        </button>
+        <button
+          type="button"
+          className={`mode-option ${mode === 'code' ? 'active' : ''}`}
+          onClick={handleModeToggle}
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="mode-icon">
+            <path d="M5 2L2 14h3l.5-2h5l.5 2h3L11 2H5zm.7 7.5L7 5l1.3 4.5H5.7z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+          </svg>
+          <span>CODE</span>
+        </button>
       </div>
 
       <div className="titlebar-drag" onDoubleClick={handleToggleMaximize} />
@@ -163,6 +193,80 @@ export function TitleBar({ onOpenSettings }: TitleBarProps): React.ReactElement 
           letter-spacing: 0;
           -webkit-app-region: no-drag;
           flex-shrink: 0;
+        }
+
+        /* ====== Mode Switch ====== */
+        .mode-switch {
+          position: relative;
+          display: flex;
+          align-items: center;
+          height: 28px;
+          padding: 2px;
+          border-radius: 20px;
+          background: var(--bg-tertiary);
+          border: 1px solid var(--border-color);
+          -webkit-app-region: no-drag;
+          flex-shrink: 0;
+          cursor: pointer;
+        }
+
+        .mode-switch-indicator {
+          position: absolute;
+          top: 2px;
+          left: 2px;
+          width: calc(50% - 2px);
+          height: calc(100% - 4px);
+          border-radius: 18px;
+          background: var(--accent);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.08);
+          transition: transform 380ms cubic-bezier(0.34, 1.56, 0.64, 1), background 380ms cubic-bezier(0.34, 1.56, 0.64, 1);
+          will-change: transform;
+        }
+
+        .mode-switch-indicator.code {
+          transform: translateX(100%);
+          background: #e8b620;
+          box-shadow: 0 2px 8px rgba(232, 182, 32, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08);
+        }
+
+        .mode-option {
+          position: relative;
+          z-index: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 5px;
+          height: 24px;
+          padding: 0 10px;
+          border: none;
+          border-radius: 18px;
+          background: transparent;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.3px;
+          cursor: pointer;
+          color: var(--text-muted);
+          transition: color 250ms ease;
+          white-space: nowrap;
+        }
+
+        .mode-option.active {
+          color: #fff;
+        }
+
+        .mode-icon {
+          flex-shrink: 0;
+          transition: transform 380ms cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .mode-option.active .mode-icon {
+          transform: scale(1.08);
+        }
+
+        .mode-option:focus-visible {
+          outline: 2px solid var(--accent);
+          outline-offset: -2px;
+          border-radius: 18px;
         }
 
         .titlebar-actions {

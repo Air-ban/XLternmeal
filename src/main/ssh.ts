@@ -17,6 +17,8 @@ interface SSHSession {
 }
 
 export interface CommandExecutionDetails {
+  stdout: string;
+  stderr: string;
   output: string;
   exitCode: number | null;
   signal?: string;
@@ -158,24 +160,36 @@ export class SSHManager {
         return;
       }
 
+      const timeout = setTimeout(() => {
+        reject(new Error('Command timed out'));
+      }, 10000);
+
       session.client.exec(command, (err: any, stream: any) => {
         if (err) {
+          clearTimeout(timeout);
           reject(err);
           return;
         }
 
-        let output = '';
+        let stdout = '';
+        let stderr = '';
+
         stream.on('data', (data: Buffer) => {
-          output += data.toString('utf-8');
+          stdout += data.toString('utf-8');
         });
 
-        stream.stderr.on('data', (data: Buffer) => {
-          output += data.toString('utf-8');
-        });
+        if (stream.stderr) {
+          stream.stderr.on('data', (data: Buffer) => {
+            stderr += data.toString('utf-8');
+          });
+        }
 
         stream.on('close', (code: number | null, signal: string | undefined) => {
+          clearTimeout(timeout);
           resolve({
-            output,
+            stdout,
+            stderr,
+            output: stdout + stderr,
             exitCode: typeof code === 'number' ? code : null,
             signal,
           });

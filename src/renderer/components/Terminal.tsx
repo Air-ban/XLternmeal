@@ -5,7 +5,8 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { SFTPPanel } from './SFTPPanel';
 import { PortForwardPanel } from './PortForwardPanel';
 import { AgentPanel } from './AgentPanel';
-import type { LLMProviderConfig } from '../App';
+import { SystemMonitor } from './SystemMonitor';
+import type { DockablePanel, LLMProviderConfig } from '../App';
 
 declare global {
   interface Window {
@@ -84,10 +85,13 @@ interface TerminalProps {
   llmProviders: LLMProviderConfig[];
   activeLlmProviderId: string;
   onActiveLlmProviderChange: (id: string) => void;
+  dockedSidePanel: DockablePanel;
+  dockedSidePanelWidth: number;
+  onSettingsChange: (patch: Partial<{ dockedSidePanel: DockablePanel; dockedSidePanelWidth: number }>) => void;
 }
 
 type TerminalStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
-type ToolView = 'terminal' | 'agent' | 'sftp' | 'forward';
+type ToolView = 'terminal' | 'agent' | 'sftp' | 'forward' | 'monitor';
 
 function getTerminalTheme(theme: 'dark' | 'light', terminalOpacity: number) {
   const terminalAlpha = Math.max(0.45, Math.min(0.95, terminalOpacity)).toFixed(3);
@@ -151,12 +155,99 @@ export function Terminal({
   llmProviders,
   activeLlmProviderId,
   onActiveLlmProviderChange,
+  dockedSidePanel,
+  dockedSidePanelWidth,
+  onSettingsChange,
 }: TerminalProps): React.ReactElement {
   const [statuses, setStatuses] = useState<Record<string, TerminalStatus>>({});
   const [activeView, setActiveView] = useState<ToolView>('terminal');
+  const [localSplitWidth, setLocalSplitWidth] = useState(dockedSidePanelWidth);
+  const splitWrapperRef = useRef<HTMLDivElement | null>(null);
+  const [dragPreviewX, setDragPreviewX] = useState<number | null>(null);
+  const dragFinalXRef = useRef(0);
+  const wrapperLeftRef = useRef(0);
+
+  useEffect(() => {
+    setLocalSplitWidth(dockedSidePanelWidth);
+  }, [dockedSidePanelWidth]);
+
+  useEffect(() => {
+    if (dockedSidePanel !== 'none' && activeView === dockedSidePanel) {
+      setActiveView('terminal');
+    }
+  }, [dockedSidePanel]);
+
+  const mainActiveView: ToolView = dockedSidePanel !== 'none' && activeView === dockedSidePanel ? 'terminal' : activeView;
 
   const handleStatusChange = (id: string, status: TerminalStatus) => {
     setStatuses(prev => ({ ...prev, [id]: status }));
+  };
+
+  const TOOL_TABS: { key: ToolView; label: string }[] = [
+    { key: 'terminal', label: 'Terminal' },
+    { key: 'agent', label: 'AI Agent' },
+    { key: 'sftp', label: 'SFTP' },
+    { key: 'forward', label: 'Port Forward' },
+    { key: 'monitor', label: 'Monitor' },
+  ];
+
+  const PANEL_LABELS: Record<DockablePanel, string> = {
+    none: '',
+    monitor: 'Monitor',
+    agent: 'AI Agent',
+    sftp: 'SFTP',
+    forward: 'Port Forward',
+  };
+
+  const switcherTabs = TOOL_TABS.filter(t => t.key !== dockedSidePanel);
+
+  const handleDividerMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const wrapperEl = splitWrapperRef.current;
+    if (!wrapperEl) return;
+    const wrapperWidth = wrapperEl.clientWidth;
+    const startWidth = localSplitWidth;
+    dragFinalXRef.current = startX;
+    wrapperLeftRef.current = wrapperEl.getBoundingClientRect().left;
+    setDragPreviewX(startX);
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      dragFinalXRef.current = moveEvent.clientX;
+      setDragPreviewX(moveEvent.clientX);
+    };
+
+    const handleMouseUp = () => {
+      setDragPreviewX(null);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      const delta = startX - dragFinalXRef.current;
+      const finalWidth = startWidth + delta / wrapperWidth;
+      const clamped = Math.max(0.15, Math.min(0.55, finalWidth));
+      setLocalSplitWidth(clamped);
+      onSettingsChange({ dockedSidePanelWidth: clamped });
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const isSplit = dockedSidePanel !== 'none';
+
+  const renderDockedPanel = () => {
+    if (dockedSidePanel === 'monitor') return <SystemMonitor sessionId={activeTabId} theme={theme} />;
+    if (dockedSidePanel === 'agent') return <AgentPanel sessionId={activeTabId} llmProviders={llmProviders} activeLlmProviderId={activeLlmProviderId} onActiveLlmProviderChange={onActiveLlmProviderChange} />;
+    if (dockedSidePanel === 'sftp') return <SFTPPanel sessionId={activeTabId} />;
+    if (dockedSidePanel === 'forward') return <PortForwardPanel sessionId={activeTabId} />;
+    return null;
+  };
+
+  const renderMainPanel = () => {
+    if (mainActiveView === 'agent' && dockedSidePanel !== 'agent') return <AgentPanel sessionId={activeTabId} llmProviders={llmProviders} activeLlmProviderId={activeLlmProviderId} onActiveLlmProviderChange={onActiveLlmProviderChange} />;
+    if (mainActiveView === 'sftp' && dockedSidePanel !== 'sftp') return <SFTPPanel sessionId={activeTabId} />;
+    if (mainActiveView === 'forward' && dockedSidePanel !== 'forward') return <PortForwardPanel sessionId={activeTabId} />;
+    if (mainActiveView === 'monitor' && dockedSidePanel !== 'monitor') return <SystemMonitor sessionId={activeTabId} theme={theme} />;
+    return null;
   };
 
   return (
@@ -192,55 +283,103 @@ export function Terminal({
         })}
       </div>
       <div className="tool-switcher">
-        <button
-          className={`tool-tab ${activeView === 'terminal' ? 'active' : ''}`}
-          onClick={() => setActiveView('terminal')}
-        >
-          Terminal
-        </button>
-        <button
-          className={`tool-tab ${activeView === 'agent' ? 'active' : ''}`}
-          onClick={() => setActiveView('agent')}
-        >
-          AI Agent
-        </button>
-        <button
-          className={`tool-tab ${activeView === 'sftp' ? 'active' : ''}`}
-          onClick={() => setActiveView('sftp')}
-        >
-          SFTP
-        </button>
-        <button
-          className={`tool-tab ${activeView === 'forward' ? 'active' : ''}`}
-          onClick={() => setActiveView('forward')}
-        >
-          Port Forward
-        </button>
-      </div>
-      <div className="terminal-wrapper">
-        {tabs.map((tab) => (
-          <TerminalSession
-            key={tab.connection.id}
-            connection={tab.connection}
-            active={activeView === 'terminal' && tab.connection.id === activeTabId}
-            theme={theme}
-            terminalOpacity={terminalOpacity}
-            terminalFontSize={terminalFontSize}
-            terminalCursorBlink={terminalCursorBlink}
-            onStatusChange={handleStatusChange}
-          />
+        {switcherTabs.map(({ key, label }) => (
+          <button
+            key={key}
+            className={`tool-tab ${mainActiveView === key ? 'active' : ''}`}
+            onClick={() => setActiveView(key)}
+            onDoubleClick={() => {
+              if (key === 'terminal') return;
+              onSettingsChange({
+                dockedSidePanel: dockedSidePanel === key ? 'none' : (key as DockablePanel),
+              });
+            }}
+            title={key === 'terminal' ? '' : '双击固定到侧边'}
+          >
+            {label}
+          </button>
         ))}
-        {activeView === 'agent' && (
-          <AgentPanel
-            sessionId={activeTabId}
-            llmProviders={llmProviders}
-            activeLlmProviderId={activeLlmProviderId}
-            onActiveLlmProviderChange={onActiveLlmProviderChange}
-          />
+        {isSplit && (
+          <span className="tool-tab-docked-indicator">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M1 2h10v8H1z" stroke="var(--success)" strokeWidth="1" strokeLinejoin="round" />
+              <path d="M7 2v8" stroke="var(--success)" strokeWidth="1" />
+            </svg>
+            {PANEL_LABELS[dockedSidePanel]}
+          </span>
         )}
-        {activeView === 'sftp' && <SFTPPanel sessionId={activeTabId} />}
-        {activeView === 'forward' && <PortForwardPanel sessionId={activeTabId} />}
       </div>
+      {isSplit ? (
+        <div className="terminal-wrapper split-layout" ref={splitWrapperRef}>
+          {dragPreviewX !== null && (
+            <div
+              className="split-ghost"
+              style={{ left: `${dragPreviewX - wrapperLeftRef.current}px` }}
+            />
+          )}
+          <div className="split-main">
+            {tabs.map((tab) => (
+              <TerminalSession
+                key={tab.connection.id}
+                connection={tab.connection}
+                active={mainActiveView === 'terminal' && tab.connection.id === activeTabId}
+                theme={theme}
+                terminalOpacity={terminalOpacity}
+                terminalFontSize={terminalFontSize}
+                terminalCursorBlink={terminalCursorBlink}
+                onStatusChange={handleStatusChange}
+              />
+            ))}
+            {renderMainPanel()}
+          </div>
+          <div className="split-divider" onMouseDown={handleDividerMouseDown}>
+            <div className="split-divider-handle" />
+          </div>
+          <div className="split-side" style={{ width: `${localSplitWidth * 100}%` }}>
+            <div className="split-side-header">
+              <span className="split-side-title">{PANEL_LABELS[dockedSidePanel]}</span>
+              <button
+                className="split-side-undock"
+                onClick={() => onSettingsChange({ dockedSidePanel: 'none' })}
+                title="Undock panel"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+            <div className="split-side-body">
+              {renderDockedPanel()}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="terminal-wrapper">
+          {tabs.map((tab) => (
+            <TerminalSession
+              key={tab.connection.id}
+              connection={tab.connection}
+              active={activeView === 'terminal' && tab.connection.id === activeTabId}
+              theme={theme}
+              terminalOpacity={terminalOpacity}
+              terminalFontSize={terminalFontSize}
+              terminalCursorBlink={terminalCursorBlink}
+              onStatusChange={handleStatusChange}
+            />
+          ))}
+          {activeView === 'agent' && (
+            <AgentPanel
+              sessionId={activeTabId}
+              llmProviders={llmProviders}
+              activeLlmProviderId={activeLlmProviderId}
+              onActiveLlmProviderChange={onActiveLlmProviderChange}
+            />
+          )}
+          {activeView === 'sftp' && <SFTPPanel sessionId={activeTabId} />}
+          {activeView === 'forward' && <PortForwardPanel sessionId={activeTabId} />}
+          {activeView === 'monitor' && <SystemMonitor sessionId={activeTabId} theme={theme} />}
+        </div>
+      )}
 
       <style>{`
         .terminal-container {
@@ -265,6 +404,7 @@ export function Terminal({
 
         .tool-switcher {
           display: flex;
+          align-items: center;
           gap: 6px;
           padding: 8px 12px;
           border-bottom: 1px solid var(--border-color);
@@ -294,6 +434,20 @@ export function Terminal({
           color: var(--accent);
           background: var(--accent-subtle);
           border-color: rgba(88, 166, 255, 0.24);
+        }
+
+        .tool-tab-docked-indicator {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 6px 10px;
+          border: 1px solid rgba(63, 185, 80, 0.28);
+          border-radius: var(--radius-sm);
+          background: rgba(63, 185, 80, 0.08);
+          color: var(--success);
+          font-size: 12px;
+          font-weight: 500;
+          margin-left: auto;
         }
 
         .tab {
@@ -370,6 +524,121 @@ export function Terminal({
           position: relative;
           overflow: hidden;
           background: transparent;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .terminal-wrapper.split-layout {
+          display: flex;
+          flex-direction: row;
+        }
+
+        .split-main {
+          flex: 1;
+          position: relative;
+          overflow: hidden;
+          min-width: 200px;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .split-ghost {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: 3px;
+          background: var(--accent);
+          pointer-events: none;
+          z-index: 50;
+          opacity: 0.8;
+        }
+
+        .split-divider {
+          width: 6px;
+          cursor: col-resize;
+          background: var(--border-color);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          transition: background 150ms ease;
+          position: relative;
+        }
+
+        .split-divider:hover {
+          background: var(--accent);
+        }
+
+        .split-divider-handle {
+          width: 2px;
+          height: 32px;
+          border-radius: 1px;
+          background: var(--text-muted);
+          opacity: 0.5;
+          transition: opacity 150ms ease;
+        }
+
+        .split-divider:hover .split-divider-handle {
+          opacity: 1;
+          background: var(--accent);
+        }
+
+        .split-side {
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          min-width: 180px;
+          border-left: none;
+        }
+
+        .split-side-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 6px 12px;
+          border-bottom: 1px solid var(--border-color);
+          background: rgba(var(--acrylic-tint-rgb), var(--acrylic-opacity));
+          backdrop-filter: blur(var(--acrylic-blur)) saturate(var(--acrylic-saturation));
+          -webkit-backdrop-filter: blur(var(--acrylic-blur)) saturate(var(--acrylic-saturation));
+          flex-shrink: 0;
+        }
+
+        .split-side-title {
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.4px;
+          text-transform: uppercase;
+          color: var(--success);
+        }
+
+        .split-side-undock {
+          width: 22px;
+          height: 22px;
+          border: none;
+          border-radius: 3px;
+          background: transparent;
+          color: var(--text-muted);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all 150ms ease;
+        }
+
+        .split-side-undock:hover {
+          background: var(--bg-tertiary);
+          color: var(--danger);
+        }
+
+        .split-side-body {
+          flex: 1;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .split-side-body > .system-monitor {
+          flex: 1;
         }
 
         .terminal-session {

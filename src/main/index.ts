@@ -267,8 +267,12 @@ ipcMain.handle('ssh:resize', (_event, sessionId: string, cols: number, rows: num
 
 ipcMain.handle('ssh:execute', async (_event, sessionId: string, command: string) => {
   try {
-    const result = await sshManager.execute(sessionId, command);
-    return { success: true, output: result };
+    const result = await sshManager.executeDetailed(sessionId, command);
+    if (result.exitCode !== null && result.exitCode !== 0) {
+      const error = result.stderr.trim() || result.stdout.trim() || `Command exited with code ${result.exitCode}`;
+      return { success: false, error };
+    }
+    return { success: true, output: result.stdout };
   } catch (err: any) {
     return { success: false, error: err.message };
   }

@@ -6,6 +6,7 @@ import { ConnectionDialog } from './components/ConnectionDialog';
 import { TitleBar } from './components/TitleBar';
 import { SettingsDialog } from './components/SettingsDialog';
 import { Onboarding } from './components/Onboarding';
+import { VibeCode } from './components/VibeCode';
 
 declare global {
   interface Window {
@@ -75,6 +76,7 @@ export interface Tab {
 
 export type AcrylicTone = 'auto' | 'dark' | 'light';
 export type ApprovalMode = 'manual' | 'auto_accept';
+export type DockablePanel = 'none' | 'monitor' | 'agent' | 'sftp' | 'forward';
 
 export interface LLMProviderConfig {
   id: string;
@@ -100,6 +102,8 @@ export interface AppSettings {
   terminalCursorBlink: boolean;
   llmProviders: LLMProviderConfig[];
   activeLlmProviderId: string;
+  dockedSidePanel: DockablePanel;
+  dockedSidePanelWidth: number;
 }
 
 const DEFAULT_LLM_PROVIDER: LLMProviderConfig = {
@@ -126,6 +130,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   terminalCursorBlink: true,
   llmProviders: [DEFAULT_LLM_PROVIDER],
   activeLlmProviderId: DEFAULT_LLM_PROVIDER.id,
+  dockedSidePanel: 'none',
+  dockedSidePanelWidth: 0.30,
 };
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
@@ -213,13 +219,21 @@ function loadSettings(): AppSettings {
       activeLlmProviderId: typeof parsed.activeLlmProviderId === 'string' && parsed.activeLlmProviderId.trim()
         ? parsed.activeLlmProviderId
         : loadLlmProviders(parsed)[0].id,
+      dockedSidePanel: parsed.dockedSidePanel === 'monitor' || parsed.dockedSidePanel === 'agent' || parsed.dockedSidePanel === 'sftp' || parsed.dockedSidePanel === 'forward'
+        ? parsed.dockedSidePanel
+        : DEFAULT_SETTINGS.dockedSidePanel,
+      dockedSidePanelWidth: clampNumber(parsed.dockedSidePanelWidth, 0.15, 0.55, DEFAULT_SETTINGS.dockedSidePanelWidth),
     };
   } catch {
     return DEFAULT_SETTINGS;
   }
 }
 
+export type AppMode = 'ssh' | 'code';
+
 export function App(): React.ReactElement {
+  const [mode, setMode] = useState<AppMode>('ssh');
+  const [sidebarVisible, setSidebarVisible] = useState(true);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
   const [tabs, setTabs] = useState<Tab[]>([]);
@@ -354,9 +368,14 @@ export function App(): React.ReactElement {
   return (
     <>
       <TitleBar
+        mode={mode}
+        onToggleMode={() => setMode(prev => prev === 'ssh' ? 'code' : 'ssh')}
         onOpenSettings={() => setShowSettings(true)}
       />
       <Sidebar
+        mode={mode}
+        visible={sidebarVisible}
+        onToggleVisible={() => setSidebarVisible(prev => !prev)}
         connections={savedConnections}
         activeId={activeTabId}
         theme={theme}
@@ -368,7 +387,9 @@ export function App(): React.ReactElement {
         onEdit={handleEditConnection}
       />
       <main className="main-area">
-        {activeTab ? (
+        {mode === 'code' ? (
+          <VibeCode />
+        ) : activeTab ? (
           <Terminal
             tabs={tabs}
             activeTabId={activeTabId!}
@@ -381,6 +402,9 @@ export function App(): React.ReactElement {
             llmProviders={settings.llmProviders}
             activeLlmProviderId={settings.activeLlmProviderId}
             onActiveLlmProviderChange={(id) => handleSettingsChange({ activeLlmProviderId: id })}
+            dockedSidePanel={settings.dockedSidePanel}
+            dockedSidePanelWidth={settings.dockedSidePanelWidth}
+            onSettingsChange={handleSettingsChange}
           />
         ) : (
           <Welcome onNewConnection={() => { setEditingConnection(null); setShowDialog(true); }} />

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import type { AcrylicTone, AppSettings, ApprovalMode, LLMProviderConfig } from '../App';
+import type { AcrylicTone, AppSettings, ApprovalMode, DockablePanel, LLMProviderConfig } from '../App';
 
 interface SettingsDialogProps {
   theme: 'dark' | 'light';
@@ -345,6 +345,43 @@ export function SettingsDialog({
                 onChange={(e) => onSettingsChange({ terminalCursorBlink: e.target.checked })}
               />
             </label>
+          </section>
+
+          <section className="settings-section">
+            <h3>布局</h3>
+            <div className="setting-row">
+              <div>
+                <label>侧栏面板</label>
+                <p>将面板固定在终端右侧</p>
+              </div>
+              <select
+                value={settings.dockedSidePanel}
+                onChange={(e) => onSettingsChange({ dockedSidePanel: e.target.value as DockablePanel })}
+              >
+                <option value="none">无（标签切换）</option>
+                <option value="monitor">Monitor</option>
+                <option value="agent">AI Agent</option>
+                <option value="sftp">SFTP</option>
+                <option value="forward">Port Forward</option>
+              </select>
+            </div>
+
+            {settings.dockedSidePanel !== 'none' && (
+              <div className="setting-row">
+                <div>
+                  <label>侧栏宽度</label>
+                  <p>{Math.round(settings.dockedSidePanelWidth * 100)}%</p>
+                </div>
+                <input
+                  type="range"
+                  min="15"
+                  max="55"
+                  step="1"
+                  value={Math.round(settings.dockedSidePanelWidth * 100)}
+                  onChange={(e) => onSettingsChange({ dockedSidePanelWidth: Number(e.target.value) / 100 })}
+                />
+              </div>
+            )}
           </section>
 
           <section className="settings-section">
