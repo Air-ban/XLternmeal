@@ -338,8 +338,6 @@ export function App(): React.ReactElement {
   return (
     <>
       <TitleBar
-        theme={theme}
-        onToggleTheme={handleToggleTheme}
         onOpenSettings={() => setShowSettings(true)}
       />
       <Sidebar

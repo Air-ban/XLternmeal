@@ -1,12 +1,10 @@
 import React, { useEffect, useState } from 'react';
 
 interface TitleBarProps {
-  theme: 'dark' | 'light';
-  onToggleTheme: () => void;
   onOpenSettings: () => void;
 }
 
-export function TitleBar({ theme, onToggleTheme, onOpenSettings }: TitleBarProps): React.ReactElement {
+export function TitleBar({ onOpenSettings }: TitleBarProps): React.ReactElement {
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
@@ -31,18 +29,6 @@ export function TitleBar({ theme, onToggleTheme, onOpenSettings }: TitleBarProps
       <div className="titlebar-drag" />
 
       <div className="titlebar-actions">
-        <button type="button" className="titlebar-tool" onClick={onToggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
-          {theme === 'dark' ? (
-            <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
-              <circle cx="7.5" cy="7.5" r="3.2" stroke="currentColor" strokeWidth="1.4" />
-              <path d="M7.5 1.2v1.4M7.5 12.4v1.4M1.2 7.5h1.4M12.4 7.5h1.4M3 3l1 1M11 11l1 1M12 3l-1 1M4 11l-1 1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            </svg>
-          ) : (
-            <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
-              <path d="M12.2 9.5A5 5 0 0 1 5.5 2.8 5.4 5.4 0 1 0 12.2 9.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
-        </button>
         <button type="button" className="titlebar-tool" onClick={onOpenSettings} title="Settings">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
             <path d="M6.8 1.8h2.4l.4 1.6c.4.1.8.3 1.1.5l1.4-.8 1.2 2-1.2 1.1c0 .2.1.5.1.8s0 .6-.1.8l1.2 1.1-1.2 2-1.4-.8c-.3.2-.7.4-1.1.5l-.4 1.6H6.8l-.4-1.6c-.4-.1-.8-.3-1.1-.5l-1.4.8-1.2-2 1.2-1.1c0-.2-.1-.5-.1-.8s0-.6.1-.8L2.7 5.1l1.2-2 1.4.8c.3-.2.7-.4 1.1-.5l.4-1.6z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />

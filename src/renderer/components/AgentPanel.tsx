@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LLMProviderConfig } from '../App';
 
 interface AgentPanelProps {
@@ -28,7 +28,7 @@ interface AgentPlan {
   approval: CommandApproval;
 }
 
-interface AgentContextMessage {
+export interface AgentContextMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
@@ -43,6 +43,14 @@ interface AgentExecutionResult {
   signal?: string;
   approval: CommandApproval;
   attempts: Array<{ command: string; output: string; exitCode: number | null }>;
+}
+
+interface AgentSession {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messages: AgentContextMessage[];
 }
 
 function requestId(): string {
@@ -62,8 +70,54 @@ function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function formatDate(timestamp: number): string {
+  const d = new Date(timestamp);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  if (isToday) return formatTime(timestamp);
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
 function providerTitle(provider: LLMProviderConfig): string {
   return `${provider.name} / ${provider.llmModel}`;
+}
+
+function historyKey(sessionId: string): string {
+  return `xlterm-agent-sessions-${sessionId}`;
+}
+
+function loadSessions(sessionId: string): AgentSession[] {
+  try {
+    const raw = localStorage.getItem(historyKey(sessionId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((s): s is AgentSession => (
+      typeof s?.id === 'string' &&
+      typeof s?.title === 'string' &&
+      Array.isArray(s?.messages)
+    ));
+  } catch {
+    return [];
+  }
+}
+
+function saveSessions(sessionId: string, sessions: AgentSession[]) {
+  localStorage.setItem(historyKey(sessionId), JSON.stringify(sessions));
+}
+
+function generateTitle(messages: AgentContextMessage[]): string {
+  const firstUser = messages.find((m) => m.role === 'user');
+  if (firstUser) {
+    const text = firstUser.content.trim();
+    if (text.length > 0) {
+      return text.length > 30 ? `${text.slice(0, 30)}...` : text;
+    }
+  }
+  return 'New Session';
 }
 
 interface SlashCommand {
@@ -154,6 +208,13 @@ export function AgentPanel({
   const [statusText, setStatusText] = useState('Idle');
   const [slashIndex, setSlashIndex] = useState(0);
 
+  const [sessions, setSessions] = useState<AgentSession[]>(() => loadSessions(sessionId));
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
+  const [editTitleValue, setEditTitleValue] = useState('');
+
+  const historyRef = useRef<HTMLDivElement>(null);
+
   const selectedProvider = useMemo(() => {
     return llmProviders.find((provider) => provider.id === activeLlmProviderId) || llmProviders[0] || null;
   }, [activeLlmProviderId, llmProviders]);
@@ -181,6 +242,12 @@ export function AgentPanel({
     return pendingPlan.risk.reasons.join(', ');
   }, [pendingPlan]);
 
+  const currentSessionTitle = useMemo(() => {
+    if (!activeSessionId) return 'New Session';
+    const s = sessions.find((x) => x.id === activeSessionId);
+    return s?.title || 'New Session';
+  }, [activeSessionId, sessions]);
+
   useEffect(() => {
     if (selectedProvider && selectedProvider.id !== activeLlmProviderId) {
       onActiveLlmProviderChange(selectedProvider.id);
@@ -190,6 +257,29 @@ export function AgentPanel({
   useEffect(() => {
     setSlashIndex(0);
   }, [slashQuery]);
+
+  useEffect(() => {
+    historyRef.current?.scrollTo({ top: historyRef.current.scrollHeight, behavior: 'smooth' });
+  }, [contextMessages, pendingPlan, lastResult, error]);
+
+  const syncSessionToStorage = useCallback((messages: AgentContextMessage[], sessionIdToSync?: string) => {
+    const sid = sessionIdToSync || activeSessionId;
+    if (!sid) return;
+    setSessions((prev) => {
+      const existing = prev.find((s) => s.id === sid);
+      const title = existing?.title || generateTitle(messages);
+      const updated: AgentSession = {
+        id: sid,
+        title,
+        createdAt: existing?.createdAt || Date.now(),
+        updatedAt: Date.now(),
+        messages: [...messages],
+      };
+      const next = [updated, ...prev.filter((s) => s.id !== sid)];
+      saveSessions(sessionId, next);
+      return next;
+    });
+  }, [activeSessionId, sessionId]);
 
   const loadContext = async () => {
     const result = await window.electronAPI.agent.getContext(sessionId);
@@ -205,6 +295,8 @@ export function AgentPanel({
     setLastResult(null);
     setError('');
     setStatusText('Idle');
+    setActiveSessionId(null);
+    setSessions(loadSessions(sessionId));
     loadContext();
   }, [sessionId]);
 
@@ -254,12 +346,15 @@ export function AgentPanel({
         }
         if (result.context) {
           setContextMessages(result.context);
+          syncSessionToStorage(result.context);
         }
         return;
       }
 
       setLastResult(result.result);
-      setContextMessages(result.context || []);
+      const nextMessages = result.context || [];
+      setContextMessages(nextMessages);
+      syncSessionToStorage(nextMessages);
       setPendingPlan(null);
       setPendingInstruction('');
       setPendingProviderId('');
@@ -284,12 +379,25 @@ export function AgentPanel({
       return;
     }
 
+    const optimisticMessage: AgentContextMessage = {
+      role: 'user',
+      content: input,
+      timestamp: Date.now(),
+    };
+    setContextMessages((prev) => [...prev, optimisticMessage]);
+
     setBusy(true);
     setError('');
     setPendingPlan(null);
     setPendingProviderId('');
     setLastResult(null);
     const id = requestId();
+
+    let currentActiveId = activeSessionId;
+    if (!currentActiveId) {
+      currentActiveId = requestId();
+      setActiveSessionId(currentActiveId);
+    }
 
     try {
       const result = await runWithStatus(id, () => window.electronAPI.agent.createPlan({
@@ -304,7 +412,9 @@ export function AgentPanel({
         return;
       }
 
-      setContextMessages(result.context || []);
+      const nextMessages = result.context || [];
+      setContextMessages(nextMessages);
+      syncSessionToStorage(nextMessages, currentActiveId);
 
       if (!result.plan.needExecute) {
         setInstruction('');
@@ -333,8 +443,75 @@ export function AgentPanel({
     setPendingInstruction('');
     setPendingProviderId('');
     setLastResult(null);
+    setActiveSessionId(null);
     setStatusText('Context cleared');
   };
+
+  const handleNewSession = useCallback(async () => {
+    await window.electronAPI.agent.clearContext(sessionId);
+    setContextMessages([]);
+    setPendingPlan(null);
+    setPendingInstruction('');
+    setPendingProviderId('');
+    setLastResult(null);
+    setActiveSessionId(null);
+    setError('');
+    setStatusText('Idle');
+  }, [sessionId]);
+
+  const handleLoadSession = useCallback((session: AgentSession) => {
+    setActiveSessionId(session.id);
+    setContextMessages([...session.messages]);
+    setPendingPlan(null);
+    setPendingInstruction('');
+    setPendingProviderId('');
+    setLastResult(null);
+    setError('');
+    setStatusText('Idle');
+  }, []);
+
+  const handleDeleteSession = useCallback((id: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setSessions((prev) => {
+      const next = prev.filter((s) => s.id !== id);
+      saveSessions(sessionId, next);
+      return next;
+    });
+    if (activeSessionId === id) {
+      setActiveSessionId(null);
+      setContextMessages([]);
+    }
+  }, [activeSessionId, sessionId]);
+
+  const handleStartEditTitle = useCallback((session: AgentSession, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setEditingTitleId(session.id);
+    setEditTitleValue(session.title);
+  }, []);
+
+  const handleSaveTitle = useCallback(() => {
+    if (!editingTitleId) return;
+    const trimmed = editTitleValue.trim();
+    if (!trimmed) {
+      setEditingTitleId(null);
+      return;
+    }
+    setSessions((prev) => {
+      const next = prev.map((s) => s.id === editingTitleId ? { ...s, title: trimmed, updatedAt: Date.now() } : s);
+      saveSessions(sessionId, next);
+      return next;
+    });
+    setEditingTitleId(null);
+  }, [editingTitleId, editTitleValue, sessionId]);
+
+  const handleTitleKeyDown = useCallback((event: React.KeyboardEvent) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      handleSaveTitle();
+    } else if (event.key === 'Escape') {
+      setEditingTitleId(null);
+    }
+  }, [handleSaveTitle]);
 
   const applySlashCommand = (command: SlashCommand) => {
     if (command.action === 'clear-context') {
@@ -370,7 +547,7 @@ export function AgentPanel({
 
   const handleInstructionKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (!showSlashCommands) {
-      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
         event.preventDefault();
         event.currentTarget.form?.requestSubmit();
       }
@@ -396,140 +573,403 @@ export function AgentPanel({
 
   return (
     <div className="agent-panel">
-      <div className="agent-toolbar acrylic">
-        <div>
-          <strong>AI Agent</strong>
-          <span>{selectedProvider ? `${statusText} - ${providerTitle(selectedProvider)}` : statusText}</span>
+      <aside className="agent-sidebar">
+        <div className="agent-sidebar-header">
+          <button type="button" className="new-session-btn" onClick={handleNewSession} title="New Session">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path d="M8 2v12M2 8h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            <span>New</span>
+          </button>
         </div>
-        <div className="agent-toolbar-actions">
-          <button type="button" onClick={loadContext} disabled={busy}>Refresh</button>
-          <button type="button" onClick={handleClearContext} disabled={busy}>Clear Context</button>
+        <div className="agent-sidebar-list">
+          {sessions.length === 0 ? (
+            <div className="agent-sidebar-empty">No history</div>
+          ) : (
+            sessions.map((session) => (
+              <div
+                key={session.id}
+                className={`agent-sidebar-item ${activeSessionId === session.id ? 'active' : ''}`}
+                onClick={() => handleLoadSession(session)}
+                title={session.title}
+              >
+                {editingTitleId === session.id ? (
+                  <input
+                    className="agent-sidebar-edit"
+                    value={editTitleValue}
+                    onChange={(e) => setEditTitleValue(e.target.value)}
+                    onKeyDown={handleTitleKeyDown}
+                    onBlur={handleSaveTitle}
+                    onClick={(e) => e.stopPropagation()}
+                    autoFocus
+                  />
+                ) : (
+                  <>
+                    <div className="agent-sidebar-item-top">
+                      <span className="agent-sidebar-title">{session.title}</span>
+                      <span className="agent-sidebar-date">{formatDate(session.updatedAt)}</span>
+                    </div>
+                    <div className="agent-sidebar-item-meta">
+                      <span>{session.messages.length} messages</span>
+                    </div>
+                  </>
+                )}
+                {editingTitleId !== session.id && (
+                  <div className="agent-sidebar-item-actions">
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      onClick={(e) => handleStartEditTitle(session, e)}
+                      title="Rename"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                        <path d="M11.5 2.5l2 2L5 13H3v-2L11.5 2.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-btn danger"
+                      onClick={(e) => handleDeleteSession(session.id, e)}
+                      title="Delete"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                        <path d="M3 4h10M6 4V2.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V4M5.5 7v5M8 7v5M10.5 7v5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
         </div>
-      </div>
+      </aside>
 
-      {error && <div className="agent-error">{error}</div>}
+      <div className="agent-main">
+        <div className="agent-toolbar acrylic">
+          <div>
+            <strong>{currentSessionTitle}</strong>
+            <span>{selectedProvider ? `${statusText} - ${providerTitle(selectedProvider)}` : statusText}</span>
+          </div>
+          <div className="agent-toolbar-actions">
+            <button type="button" onClick={loadContext} disabled={busy}>Refresh</button>
+            <button type="button" onClick={handleClearContext} disabled={busy}>Clear Context</button>
+          </div>
+        </div>
 
-      <div className="agent-history">
-        {contextMessages.length === 0 && !pendingPlan && !lastResult ? (
-          <div className="agent-empty">No context</div>
-        ) : (
-          contextMessages.map((message, index) => (
-            <article className={`agent-message ${message.role}`} key={`${message.timestamp}:${index}`}>
-              <header>
-                <span>{message.role === 'user' ? 'Instruction' : 'Agent'}</span>
-                <time>{formatTime(message.timestamp)}</time>
-              </header>
-              <pre>{message.content}</pre>
-            </article>
-          ))
-        )}
+        {error && <div className="agent-error">{error}</div>}
 
-        {pendingPlan && (
-          <article className={`agent-plan ${pendingPlan.risk.isDangerous ? 'danger' : ''}`}>
-            <header>
-              <strong>Pending Command</strong>
-              <span>{commandRiskText}</span>
-            </header>
-            <pre>{pendingPlan.command}</pre>
-            <p>{pendingPlan.explanation}</p>
-            <div className="agent-plan-actions">
-              <button
-                type="button"
-                className="secondary-btn"
-                onClick={() => {
-                  setPendingPlan(null);
-                  setPendingInstruction('');
-                  setPendingProviderId('');
-                  setStatusText('Command rejected');
-                }}
-                disabled={busy}
-              >
-                Reject
-              </button>
-              <button
-                type="button"
-                className="primary-btn"
-                onClick={() => executePlan(pendingPlan, pendingInstruction, true, pendingProvider)}
-                disabled={busy}
-              >
-                Execute
-              </button>
+        <div className="agent-history" ref={historyRef}>
+          {contextMessages.length === 0 && !pendingPlan && !lastResult ? (
+            <div className="agent-empty">
+              <div className="agent-empty-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="currentColor" fillOpacity="0.2" />
+                  <path d="M12 6v6l4 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </div>
+              <p>Start a new conversation with the AI Agent</p>
+              <p className="agent-empty-hint">Type / for quick commands</p>
             </div>
-          </article>
-        )}
+          ) : (
+            contextMessages.map((message, index) => (
+              <article className={`agent-message ${message.role}`} key={`${message.timestamp}:${index}`}>
+                <header>
+                  <span>{message.role === 'user' ? 'Instruction' : 'Agent'}</span>
+                  <time>{formatTime(message.timestamp)}</time>
+                </header>
+                <pre>{message.content}</pre>
+              </article>
+            ))
+          )}
 
-        {lastResult && (
-          <article className={`agent-result ${lastResult.exitCode === 0 ? '' : 'danger'}`}>
-            <header>
-              <strong>Last Result</strong>
-              <span>Exit {lastResult.exitCode ?? 'unknown'}</span>
-            </header>
-            <pre>{lastResult.output || '(no output)'}</pre>
-          </article>
-        )}
-      </div>
-
-      <form className="agent-input" onSubmit={handleSubmit}>
-        <div className="agent-composer">
-          {showSlashCommands && (
-            <div className="slash-menu">
-              {slashCommands.map((command, index) => (
+          {pendingPlan && (
+            <article className={`agent-plan ${pendingPlan.risk.isDangerous ? 'danger' : ''}`}>
+              <header>
+                <strong>Pending Command</strong>
+                <span>{commandRiskText}</span>
+              </header>
+              <pre>{pendingPlan.command}</pre>
+              <p>{pendingPlan.explanation}</p>
+              <div className="agent-plan-actions">
                 <button
                   type="button"
-                  key={command.id}
-                  className={`slash-item ${index === slashIndex ? 'active' : ''}`}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    applySlashCommand(command);
+                  className="secondary-btn"
+                  onClick={() => {
+                    setPendingPlan(null);
+                    setPendingInstruction('');
+                    setPendingProviderId('');
+                    setStatusText('Command rejected');
                   }}
+                  disabled={busy}
                 >
-                  <strong>{command.title}</strong>
-                  <span>{command.description}</span>
+                  Reject
                 </button>
-              ))}
-            </div>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => executePlan(pendingPlan, pendingInstruction, true, pendingProvider)}
+                  disabled={busy}
+                >
+                  Execute
+                </button>
+              </div>
+            </article>
           )}
-          <div className="composer-toolbar">
-            <label className="agent-model-picker">
-              <span>LLM</span>
-              <select
-                value={selectedProvider?.id || ''}
-                onChange={(event) => onActiveLlmProviderChange(event.target.value)}
-                disabled={busy || llmProviders.length === 0}
-              >
-                {llmProviders.length === 0 ? (
-                  <option value="">No LLM configured</option>
-                ) : (
-                  llmProviders.map((provider) => (
-                    <option value={provider.id} key={provider.id}>
-                      {providerTitle(provider)}
-                    </option>
-                  ))
-                )}
-              </select>
-            </label>
-            <span className="slash-hint">Type / for commands</span>
-          </div>
-          <textarea
-            value={instruction}
-            onChange={(e) => setInstruction(e.target.value)}
-            onKeyDown={handleInstructionKeyDown}
-            placeholder="Describe what to do on this SSH server..."
-            disabled={busy || !selectedProvider}
-          />
+
+          {lastResult && (
+            <article className={`agent-result ${lastResult.exitCode === 0 ? '' : 'danger'}`}>
+              <header>
+                <strong>Last Result</strong>
+                <span>Exit {lastResult.exitCode ?? 'unknown'}</span>
+              </header>
+              <pre>{lastResult.output || '(no output)'}</pre>
+            </article>
+          )}
+
+          {busy && !pendingPlan && !lastResult && (
+            <article className="agent-message assistant typing">
+              <header>
+                <span>Agent</span>
+                <span className="typing-status">Thinking...</span>
+              </header>
+              <div className="typing-indicator">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </article>
+          )}
         </div>
-        <button type="submit" className="primary-btn" disabled={busy || !selectedProvider}>
-          {busy ? 'Running' : 'Run'}
-        </button>
-      </form>
+
+        <form className="agent-input" onSubmit={handleSubmit}>
+          <div className="agent-composer">
+            {showSlashCommands && (
+              <div className="slash-menu">
+                {slashCommands.map((command, index) => (
+                  <button
+                    type="button"
+                    key={command.id}
+                    className={`slash-item ${index === slashIndex ? 'active' : ''}`}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      applySlashCommand(command);
+                    }}
+                  >
+                    <strong>{command.title}</strong>
+                    <span>{command.description}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="composer-toolbar">
+              <label className="agent-model-picker">
+                <span>LLM</span>
+                <select
+                  value={selectedProvider?.id || ''}
+                  onChange={(event) => onActiveLlmProviderChange(event.target.value)}
+                  disabled={busy || llmProviders.length === 0}
+                >
+                  {llmProviders.length === 0 ? (
+                    <option value="">No LLM configured</option>
+                  ) : (
+                    llmProviders.map((provider) => (
+                      <option value={provider.id} key={provider.id}>
+                        {providerTitle(provider)}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+              <span className="slash-hint">Enter to send · Shift+Enter for newline · Type / for commands</span>
+            </div>
+            <textarea
+              value={instruction}
+              onChange={(e) => setInstruction(e.target.value)}
+              onKeyDown={handleInstructionKeyDown}
+              placeholder="Describe what to do on this SSH server..."
+              disabled={busy || !selectedProvider}
+            />
+          </div>
+          <button type="submit" className="primary-btn" disabled={busy || !selectedProvider}>
+            {busy ? 'Running' : 'Run'}
+          </button>
+        </form>
+      </div>
 
       <style>{`
         .agent-panel {
           height: 100%;
           display: flex;
-          flex-direction: column;
           background: var(--solid-surface);
           color: var(--text-primary);
+          overflow: hidden;
+        }
+
+        .agent-sidebar {
+          width: 220px;
+          min-width: 220px;
+          display: flex;
+          flex-direction: column;
+          border-right: 1px solid var(--border-color);
+          background: var(--solid-surface-2);
+          flex-shrink: 0;
+        }
+
+        .agent-sidebar-header {
+          padding: 10px 12px;
+          border-bottom: 1px solid var(--border-color);
+          flex-shrink: 0;
+        }
+
+        .new-session-btn {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          height: 32px;
+          padding: 0 12px;
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-sm);
+          background: var(--solid-surface);
+          color: var(--text-primary);
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: background var(--transition), border-color var(--transition);
+        }
+
+        .new-session-btn:hover {
+          border-color: var(--accent);
+          color: var(--accent);
+        }
+
+        .agent-sidebar-list {
+          flex: 1;
+          overflow-y: auto;
+          padding: 6px;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .agent-sidebar-empty {
+          padding: 20px 12px;
+          text-align: center;
+          color: var(--text-muted);
+          font-size: 12px;
+        }
+
+        .agent-sidebar-item {
+          position: relative;
+          padding: 8px 10px;
+          border-radius: var(--radius-sm);
+          cursor: pointer;
+          transition: background var(--transition);
+          overflow: hidden;
+        }
+
+        .agent-sidebar-item:hover {
+          background: var(--bg-tertiary);
+        }
+
+        .agent-sidebar-item.active {
+          background: var(--accent-subtle);
+        }
+
+        .agent-sidebar-item-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          margin-bottom: 2px;
+        }
+
+        .agent-sidebar-title {
+          flex: 1;
+          min-width: 0;
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--text-primary);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .agent-sidebar-date {
+          flex-shrink: 0;
+          font-size: 10px;
+          color: var(--text-muted);
+          white-space: nowrap;
+        }
+
+        .agent-sidebar-item-meta {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+        }
+
+        .agent-sidebar-item-meta span {
+          font-size: 11px;
+          color: var(--text-muted);
+        }
+
+        .agent-sidebar-item-actions {
+          position: absolute;
+          top: 4px;
+          right: 4px;
+          display: flex;
+          gap: 2px;
+          opacity: 0;
+          transition: opacity var(--transition);
+        }
+
+        .agent-sidebar-item:hover .agent-sidebar-item-actions {
+          opacity: 1;
+        }
+
+        .icon-btn {
+          width: 22px;
+          height: 22px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: none;
+          border-radius: var(--radius-sm);
+          background: var(--solid-surface);
+          color: var(--text-secondary);
+          cursor: pointer;
+          padding: 0;
+        }
+
+        .icon-btn:hover {
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
+        }
+
+        .icon-btn.danger:hover {
+          background: var(--danger-subtle);
+          color: var(--danger);
+        }
+
+        .agent-sidebar-edit {
+          width: 100%;
+          height: 24px;
+          padding: 0 6px;
+          border: 1px solid var(--accent);
+          border-radius: var(--radius-sm);
+          background: var(--solid-surface);
+          color: var(--text-primary);
+          font-size: 12px;
+          outline: none;
+        }
+
+        .agent-main {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
           overflow: hidden;
         }
 
@@ -619,6 +1059,7 @@ export function AgentPanel({
           background: var(--danger-subtle);
           color: var(--danger);
           font-size: 12px;
+          flex-shrink: 0;
         }
 
         .agent-history {
@@ -632,8 +1073,24 @@ export function AgentPanel({
 
         .agent-empty {
           margin: auto;
+          text-align: center;
           color: var(--text-muted);
+        }
+
+        .agent-empty-icon {
+          margin-bottom: 12px;
+          color: var(--text-muted);
+          opacity: 0.6;
+        }
+
+        .agent-empty p {
           font-size: 13px;
+          margin: 0 0 4px;
+        }
+
+        .agent-empty-hint {
+          font-size: 12px;
+          opacity: 0.7;
         }
 
         .agent-message,
@@ -847,6 +1304,61 @@ export function AgentPanel({
           text-overflow: ellipsis;
           white-space: nowrap;
           font-size: 12px;
+        }
+
+        .agent-message.typing {
+          border-color: rgba(88, 166, 255, 0.18);
+          background: rgba(88, 166, 255, 0.04);
+        }
+
+        .typing-status {
+          color: var(--accent);
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: none;
+          letter-spacing: 0;
+          animation: typing-pulse 1.5s ease-in-out infinite;
+        }
+
+        .typing-indicator {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          padding: 4px 0;
+        }
+
+        .typing-indicator > span {
+          display: inline-block;
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: var(--accent);
+          opacity: 0.35;
+          animation: typing-bounce 1.2s ease-in-out infinite;
+        }
+
+        .typing-indicator > span:nth-child(2) {
+          animation-delay: 0.15s;
+        }
+
+        .typing-indicator > span:nth-child(3) {
+          animation-delay: 0.3s;
+        }
+
+        @keyframes typing-bounce {
+          0%, 60%, 100% {
+            transform: translateY(0);
+            opacity: 0.35;
+          }
+          30% {
+            transform: translateY(-5px);
+            opacity: 1;
+          }
+        }
+
+        @keyframes typing-pulse {
+          0%, 100% { opacity: 0.7; }
+          50% { opacity: 1; }
         }
       `}</style>
     </div>
