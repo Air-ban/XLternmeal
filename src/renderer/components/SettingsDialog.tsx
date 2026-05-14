@@ -59,7 +59,6 @@ function newProvider(): LLMProviderConfig {
     temperature: 0.1,
     maxContextMessages: 20,
     maxRetries: 3,
-    systemPrompt: '',
   };
 }
 
@@ -403,15 +402,6 @@ export function SettingsDialog({
                   </div>
                 </div>
 
-                <label className="system-prompt-field">
-                  <span>System Prompt</span>
-                  <textarea
-                    value={selectedProvider.systemPrompt}
-                    onChange={(e) => updateProvider(selectedProvider.id, { systemPrompt: e.target.value })}
-                    placeholder="Optional operating rules for this LLM..."
-                  />
-                </label>
-
                 <div className="provider-actions">
                   <button
                     className="secondary-btn"
@@ -656,8 +646,7 @@ export function SettingsDialog({
           gap: 6px;
         }
 
-        .mini-field label,
-        .system-prompt-field span {
+        .mini-field label {
           color: var(--text-muted);
           font-size: 11px;
           font-weight: 700;
@@ -665,8 +654,7 @@ export function SettingsDialog({
           text-transform: uppercase;
         }
 
-        .mini-field input,
-        .system-prompt-field textarea {
+        .mini-field input {
           width: 100%;
           border: 1px solid var(--border-color);
           border-radius: var(--radius-sm);
@@ -680,22 +668,7 @@ export function SettingsDialog({
           padding: 0 10px;
         }
 
-        .system-prompt-field {
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-          margin-top: 4px;
-        }
-
-        .system-prompt-field textarea {
-          min-height: 96px;
-          padding: 10px;
-          resize: vertical;
-          line-height: 1.45;
-        }
-
-        .mini-field input:focus,
-        .system-prompt-field textarea:focus {
+        .mini-field input:focus {
           border-color: var(--accent);
           box-shadow: 0 0 0 2px var(--accent-subtle);
         }

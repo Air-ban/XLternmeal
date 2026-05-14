@@ -12,7 +12,6 @@ export interface AgentConfig {
   temperature?: number;
   maxContextMessages?: number;
   maxRetries?: number;
-  systemPrompt?: string;
 }
 
 export interface AgentPlanRequest {
@@ -68,8 +67,33 @@ interface NormalizedAgentConfig {
   temperature: number;
   maxContextMessages: number;
   maxRetries: number;
-  systemPrompt: string;
 }
+
+const DEFAULT_SYSTEM_PROMPT = `You are an expert SSH server assistant operating on a remote Linux server.
+Your job is to help the user by analyzing their request and either:
+1. Answering directly if no command execution is needed
+2. Executing appropriate shell commands on the server and then explaining the results
+
+Rules:
+- Keep commands concise, non-interactive, and safe
+- Prefer read-only diagnostic commands unless the user explicitly asks for changes
+- Quote file paths safely when they contain spaces or special characters
+- Do not run interactive commands (those that prompt for input)`;
+
+const PLANNING_SUFFIX = `
+CRITICAL: You MUST ALWAYS respond with ONLY a single valid JSON object. No natural language before or after the JSON. No greetings. No Markdown code blocks. No extra text.
+
+The exact JSON schema is:
+{"need_execute": boolean, "command": string, "explanation": string}
+
+Rules:
+- need_execute=true: when the user wants to check, inspect, or do anything on the server. Provide a valid, non-interactive shell command in the "command" field.
+- need_execute=false: only for pure conversational questions that need no server interaction (e.g. "hello", "who are you", "what can you do"). Put your answer in the "explanation" field.
+- If unsure, use need_execute=true with a safe diagnostic command.
+- Output raw JSON only. No extra keys. No extra text.`;
+
+const REPLY_SUFFIX = `
+You have just executed a command on the server. Based on the execution results in the conversation history, provide a clear and helpful response to the user's request. Summarize what was found or done, and explain any important details. Be concise but thorough.`;
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -110,11 +134,14 @@ export class AgentManager {
         content: input,
         timestamp: Date.now(),
       }, config.maxContextMessages);
-      this.appendContext(request.sessionId, {
-        role: 'assistant',
-        content: this.describePlan(plan),
-        timestamp: Date.now(),
-      }, config.maxContextMessages);
+
+      if (!plan.needExecute) {
+        this.appendContext(request.sessionId, {
+          role: 'assistant',
+          content: plan.explanation,
+          timestamp: Date.now(),
+        }, config.maxContextMessages);
+      }
 
       onStatus?.('thinking_done', response.command || response.explanation);
       return {
@@ -258,6 +285,15 @@ export class AgentManager {
         timestamp: Date.now(),
       }, config.maxContextMessages);
 
+      onStatus?.('thinking', config.llmModel);
+      const replyContent = await this.generateReply(request.sessionId, config);
+
+      this.appendContext(request.sessionId, {
+        role: 'assistant',
+        content: replyContent,
+        timestamp: Date.now(),
+      }, config.maxContextMessages);
+
       onStatus?.('executing_done', plan.command);
       return {
         success: true,
@@ -312,7 +348,7 @@ export class AgentManager {
     input: string,
     config: NormalizedAgentConfig,
   ): Promise<LLMCommandResponse> {
-    const messages = this.buildMessages(sessionId, config, input);
+    const messages = this.buildMessages(sessionId, config, true, input);
     const content = await this.callLLM(config, messages);
     return this.parseCommandResponse(content);
   }
@@ -336,48 +372,43 @@ export class AgentManager {
       'Return corrected JSON for one next command, or need_execute false if no retry should be attempted.',
     ].join('\n');
 
-    const messages = this.buildMessages(sessionId, config, retryInput);
+    const messages = this.buildMessages(sessionId, config, true, retryInput);
     const content = await this.callLLM(config, messages);
     return this.parseCommandResponse(content);
+  }
+
+  private async generateReply(
+    sessionId: string,
+    config: NormalizedAgentConfig,
+  ): Promise<string> {
+    const messages = this.buildMessages(sessionId, config, false);
+    const content = await this.callLLM(config, messages);
+    return content.trim();
   }
 
   private buildMessages(
     sessionId: string,
     config: NormalizedAgentConfig,
-    input: string,
+    forPlanning: boolean,
+    extraInput?: string,
   ): ChatMessage[] {
     const context = this.getContext(sessionId).slice(-config.maxContextMessages);
-    return [
+    const messages: ChatMessage[] = [
       {
         role: 'system',
-        content: this.buildSystemPrompt(config.systemPrompt),
+        content: forPlanning
+          ? `${DEFAULT_SYSTEM_PROMPT}${PLANNING_SUFFIX}`
+          : `${DEFAULT_SYSTEM_PROMPT}${REPLY_SUFFIX}`,
       },
       ...context.map((message) => ({
         role: message.role,
         content: message.content,
       })),
-      {
-        role: 'user',
-        content: input,
-      },
     ];
-  }
-
-  private buildSystemPrompt(systemPrompt: string): string {
-    const basePrompt = [
-      'You are an SSH command planning agent for a remote Linux server.',
-      'Convert the user request into exactly one non-interactive shell command when server execution is needed.',
-      'Return only JSON with this schema: {"need_execute": boolean, "command": string, "explanation": string}.',
-      'Use need_execute=false when the request can be answered from context without running a command.',
-      'Keep commands concise, quote paths safely, and prefer read-only diagnostic commands unless the user clearly asks for a change.',
-      'Do not wrap JSON in Markdown. Do not include extra keys.',
-    ].join('\n');
-
-    if (!systemPrompt.trim()) {
-      return basePrompt;
+    if (extraInput) {
+      messages.push({ role: 'user', content: extraInput });
     }
-
-    return `${basePrompt}\n\nOperator instructions:\n${systemPrompt.trim()}`;
+    return messages;
   }
 
   private async callLLM(config: NormalizedAgentConfig, messages: ChatMessage[]): Promise<string> {
@@ -425,7 +456,12 @@ export class AgentManager {
     try {
       parsed = JSON.parse(jsonText);
     } catch {
-      throw new Error(`LLM response was not valid command JSON: ${truncate(content, 800)}`);
+      // Fallback: treat natural language as a non-executable explanation
+      return {
+        needExecute: false,
+        command: '',
+        explanation: content.trim(),
+      };
     }
 
     const needExecute = Boolean(parsed.need_execute ?? parsed.needExecute);
@@ -468,7 +504,6 @@ export class AgentManager {
       temperature: clampNumber(config.temperature, 0, 2, 0.1),
       maxContextMessages: Math.round(clampNumber(config.maxContextMessages, 0, 100, 20)),
       maxRetries: Math.round(clampNumber(config.maxRetries, 0, 5, 3)),
-      systemPrompt: String(config.systemPrompt || ''),
     };
   }
 
@@ -487,21 +522,6 @@ export class AgentManager {
     this.contexts.set(sessionId, limit > 0 ? current.slice(-limit) : []);
   }
 
-  private describePlan(plan: AgentPlan): string {
-    if (!plan.needExecute) {
-      return plan.explanation;
-    }
-
-    const risk = plan.risk.isDangerous
-      ? `Risk: ${plan.risk.reasons.join(', ')}`
-      : 'Risk: none detected';
-
-    return [
-      `Planned command: ${plan.command}`,
-      `Explanation: ${plan.explanation}`,
-      risk,
-    ].join('\n');
-  }
 }
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {

@@ -82,7 +82,6 @@ export interface LLMProviderConfig {
   temperature: number;
   maxContextMessages: number;
   maxRetries: number;
-  systemPrompt: string;
 }
 
 export interface AppSettings {
@@ -108,7 +107,6 @@ const DEFAULT_LLM_PROVIDER: LLMProviderConfig = {
   temperature: 0.1,
   maxContextMessages: 20,
   maxRetries: 3,
-  systemPrompt: '',
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -147,7 +145,6 @@ function normalizeProvider(raw: any, fallback: LLMProviderConfig, index: number)
     temperature: clampNumber(raw?.temperature, 0, 2, fallback.temperature),
     maxContextMessages: Math.round(clampNumber(raw?.maxContextMessages, 0, 100, fallback.maxContextMessages)),
     maxRetries: Math.round(clampNumber(raw?.maxRetries, 0, 5, fallback.maxRetries)),
-    systemPrompt: typeof raw?.systemPrompt === 'string' ? raw.systemPrompt : fallback.systemPrompt,
   };
 }
 

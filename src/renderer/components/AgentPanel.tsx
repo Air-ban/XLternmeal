@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { marked } from 'marked';
 import type { LLMProviderConfig } from '../App';
 
 interface AgentPanelProps {
@@ -32,17 +33,6 @@ export interface AgentContextMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
-}
-
-interface AgentExecutionResult {
-  needExecute: boolean;
-  command: string;
-  explanation: string;
-  output: string;
-  exitCode: number | null;
-  signal?: string;
-  approval: CommandApproval;
-  attempts: Array<{ command: string; output: string; exitCode: number | null }>;
 }
 
 interface AgentSession {
@@ -83,6 +73,13 @@ function formatDate(timestamp: number): string {
 
 function providerTitle(provider: LLMProviderConfig): string {
   return `${provider.name} / ${provider.llmModel}`;
+}
+
+function MarkdownContent({ text }: { text: string }): React.ReactElement {
+  const html = useMemo(() => {
+    return marked.parse(text, { async: false, gfm: true, breaks: true }) as string;
+  }, [text]);
+  return <div className="markdown-body" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 function historyKey(sessionId: string): string {
@@ -202,7 +199,6 @@ export function AgentPanel({
   const [pendingProviderId, setPendingProviderId] = useState('');
   const [pendingPlan, setPendingPlan] = useState<AgentPlan | null>(null);
   const [contextMessages, setContextMessages] = useState<AgentContextMessage[]>([]);
-  const [lastResult, setLastResult] = useState<AgentExecutionResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [statusText, setStatusText] = useState('Idle');
@@ -260,7 +256,7 @@ export function AgentPanel({
 
   useEffect(() => {
     historyRef.current?.scrollTo({ top: historyRef.current.scrollHeight, behavior: 'smooth' });
-  }, [contextMessages, pendingPlan, lastResult, error]);
+  }, [contextMessages, pendingPlan, error]);
 
   const syncSessionToStorage = useCallback((messages: AgentContextMessage[], sessionIdToSync?: string) => {
     const sid = sessionIdToSync || activeSessionId;
@@ -292,7 +288,6 @@ export function AgentPanel({
     setPendingPlan(null);
     setPendingInstruction('');
     setPendingProviderId('');
-    setLastResult(null);
     setError('');
     setStatusText('Idle');
     setActiveSessionId(null);
@@ -324,7 +319,6 @@ export function AgentPanel({
 
     setBusy(true);
     setError('');
-    setLastResult(null);
     const id = requestId();
 
     try {
@@ -351,7 +345,6 @@ export function AgentPanel({
         return;
       }
 
-      setLastResult(result.result);
       const nextMessages = result.context || [];
       setContextMessages(nextMessages);
       syncSessionToStorage(nextMessages);
@@ -390,7 +383,6 @@ export function AgentPanel({
     setError('');
     setPendingPlan(null);
     setPendingProviderId('');
-    setLastResult(null);
     const id = requestId();
 
     let currentActiveId = activeSessionId;
@@ -442,7 +434,6 @@ export function AgentPanel({
     setPendingPlan(null);
     setPendingInstruction('');
     setPendingProviderId('');
-    setLastResult(null);
     setActiveSessionId(null);
     setStatusText('Context cleared');
   };
@@ -453,7 +444,6 @@ export function AgentPanel({
     setPendingPlan(null);
     setPendingInstruction('');
     setPendingProviderId('');
-    setLastResult(null);
     setActiveSessionId(null);
     setError('');
     setStatusText('Idle');
@@ -465,7 +455,6 @@ export function AgentPanel({
     setPendingPlan(null);
     setPendingInstruction('');
     setPendingProviderId('');
-    setLastResult(null);
     setError('');
     setStatusText('Idle');
   }, []);
@@ -659,7 +648,7 @@ export function AgentPanel({
         {error && <div className="agent-error">{error}</div>}
 
         <div className="agent-history" ref={historyRef}>
-          {contextMessages.length === 0 && !pendingPlan && !lastResult ? (
+          {contextMessages.length === 0 && !pendingPlan ? (
             <div className="agent-empty">
               <div className="agent-empty-icon">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
@@ -677,7 +666,7 @@ export function AgentPanel({
                   <span>{message.role === 'user' ? 'Instruction' : 'Agent'}</span>
                   <time>{formatTime(message.timestamp)}</time>
                 </header>
-                <pre>{message.content}</pre>
+                <MarkdownContent text={message.content} />
               </article>
             ))
           )}
@@ -688,8 +677,8 @@ export function AgentPanel({
                 <strong>Pending Command</strong>
                 <span>{commandRiskText}</span>
               </header>
-              <pre>{pendingPlan.command}</pre>
-              <p>{pendingPlan.explanation}</p>
+              <pre className="code-block">{pendingPlan.command}</pre>
+              <MarkdownContent text={pendingPlan.explanation} />
               <div className="agent-plan-actions">
                 <button
                   type="button"
@@ -716,17 +705,7 @@ export function AgentPanel({
             </article>
           )}
 
-          {lastResult && (
-            <article className={`agent-result ${lastResult.exitCode === 0 ? '' : 'danger'}`}>
-              <header>
-                <strong>Last Result</strong>
-                <span>Exit {lastResult.exitCode ?? 'unknown'}</span>
-              </header>
-              <pre>{lastResult.output || '(no output)'}</pre>
-            </article>
-          )}
-
-          {busy && !pendingPlan && !lastResult && (
+          {busy && !pendingPlan && (
             <article className="agent-message assistant typing">
               <header>
                 <span>Agent</span>
@@ -1359,6 +1338,137 @@ export function AgentPanel({
         @keyframes typing-pulse {
           0%, 100% { opacity: 0.7; }
           50% { opacity: 1; }
+        }
+
+        .markdown-body {
+          font-size: 12px;
+          line-height: 1.6;
+          color: var(--text-primary);
+        }
+
+        .markdown-body h1,
+        .markdown-body h2,
+        .markdown-body h3,
+        .markdown-body h4,
+        .markdown-body h5,
+        .markdown-body h6 {
+          margin: 12px 0 8px;
+          font-weight: 600;
+          line-height: 1.3;
+          color: var(--text-primary);
+        }
+
+        .markdown-body h1 { font-size: 16px; }
+        .markdown-body h2 { font-size: 14px; }
+        .markdown-body h3 { font-size: 13px; }
+        .markdown-body h4,
+        .markdown-body h5,
+        .markdown-body h6 { font-size: 12px; }
+
+        .markdown-body p {
+          margin: 0 0 8px;
+        }
+
+        .markdown-body p:last-child {
+          margin-bottom: 0;
+        }
+
+        .markdown-body pre {
+          margin: 8px 0;
+          padding: 10px 12px;
+          border-radius: var(--radius-sm);
+          background: rgba(0, 0, 0, 0.2);
+          overflow-x: auto;
+        }
+
+        .markdown-body code {
+          font-family: "Cascadia Code", Consolas, monospace;
+          font-size: 11px;
+          padding: 1px 4px;
+          border-radius: 3px;
+          background: rgba(0, 0, 0, 0.15);
+        }
+
+        .markdown-body pre code {
+          padding: 0;
+          background: transparent;
+        }
+
+        .markdown-body ul,
+        .markdown-body ol {
+          margin: 6px 0;
+          padding-left: 20px;
+        }
+
+        .markdown-body li {
+          margin: 2px 0;
+        }
+
+        .markdown-body blockquote {
+          margin: 8px 0;
+          padding: 6px 10px;
+          border-left: 3px solid var(--accent);
+          background: var(--accent-subtle);
+          border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+        }
+
+        .markdown-body blockquote p {
+          margin: 0;
+        }
+
+        .markdown-body strong {
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+
+        .markdown-body em {
+          font-style: italic;
+        }
+
+        .markdown-body a {
+          color: var(--accent);
+          text-decoration: none;
+        }
+
+        .markdown-body a:hover {
+          text-decoration: underline;
+        }
+
+        .markdown-body hr {
+          border: none;
+          border-top: 1px solid var(--border-color);
+          margin: 10px 0;
+        }
+
+        .markdown-body table {
+          border-collapse: collapse;
+          margin: 8px 0;
+          width: 100%;
+          font-size: 11px;
+        }
+
+        .markdown-body th,
+        .markdown-body td {
+          border: 1px solid var(--border-color);
+          padding: 5px 8px;
+          text-align: left;
+        }
+
+        .markdown-body th {
+          background: var(--solid-surface);
+          font-weight: 600;
+        }
+
+        .code-block {
+          margin: 8px 0 0;
+          padding: 10px 12px;
+          border-radius: var(--radius-sm);
+          background: rgba(0, 0, 0, 0.2);
+          color: var(--text-primary);
+          font-family: "Cascadia Code", Consolas, monospace;
+          font-size: 11px;
+          line-height: 1.5;
+          overflow-x: auto;
         }
       `}</style>
     </div>
