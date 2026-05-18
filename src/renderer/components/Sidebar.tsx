@@ -21,6 +21,11 @@ interface SidebarProps {
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onEdit: (conn: Connection) => void;
+  projects?: { path: string; name: string }[];
+  activeProjectPath?: string | null;
+  onOpenProject?: () => void;
+  onSelectProject?: (path: string) => void;
+  onDeleteProject?: (path: string) => void;
 }
 
 export function Sidebar({
@@ -36,6 +41,11 @@ export function Sidebar({
   onSelect,
   onDelete,
   onEdit,
+  projects = [],
+  activeProjectPath,
+  onOpenProject,
+  onSelectProject,
+  onDeleteProject,
 }: SidebarProps): React.ReactElement {
   return (
     <>
@@ -164,16 +174,53 @@ export function Sidebar({
                 </svg>
                 <span className="logo-text">Vibe Code</span>
               </div>
+              <button className="btn btn-accent btn-sm" onClick={onOpenProject} title="Open Project Folder">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M2 3h4l2 2h6v8H2V3z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span>Open</span>
+              </button>
             </div>
 
             <div className="sidebar-section-label">PROJECTS</div>
             <div className="connection-list">
-              <div className="sidebar-empty">
-                <p>No projects yet</p>
-                <button className="btn btn-ghost btn-sm">
-                  Create new project
-                </button>
-              </div>
+              {projects.map((project) => (
+                <div
+                  key={project.path}
+                  className={`connection-item ${activeProjectPath === project.path ? 'active' : ''}`}
+                  onClick={() => onSelectProject?.(project.path)}
+                >
+                  <div className="connection-icon">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                      <path d="M2 4h4l2 2h8v8H2V4z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <div className="connection-info">
+                    <span className="connection-name">{project.name}</span>
+                    <span className="connection-host">{project.path}</span>
+                  </div>
+                  <div className="connection-actions">
+                    <button
+                      className="conn-action-btn conn-action-btn-danger"
+                      onClick={(e) => { e.stopPropagation(); onDeleteProject?.(project.path); }}
+                      title="Remove"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path d="M2 4h10M5 4V3h4v1M4.5 4v7.5h5V4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {projects.length === 0 && (
+                <div className="sidebar-empty">
+                  <p>No projects yet</p>
+                  <button className="btn btn-ghost btn-sm" onClick={onOpenProject}>
+                    Open project folder
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="sidebar-footer">

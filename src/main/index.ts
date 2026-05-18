@@ -1,6 +1,9 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
 import * as path from 'path';
+import * as fs from 'fs';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { SSHManager } from './ssh';
 import { AgentManager } from './agent';
 
@@ -420,6 +423,148 @@ ipcMain.handle('forward:stop', async (_event, id: string) => {
   try {
     await sshManager.stopPortForward(id);
     return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
+
+// Dialog IPC handlers
+ipcMain.handle('dialog:open-folder', async (event) => {
+  const targetWindow = resolveWindow(event);
+  if (!targetWindow) {
+    return { success: false, error: 'Window not available' };
+  }
+
+  const result = await dialog.showOpenDialog(targetWindow, {
+    properties: ['openDirectory'],
+    title: 'Open Project Folder',
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { success: true, canceled: true };
+  }
+
+  return { success: true, filePaths: result.filePaths };
+});
+
+// Project IPC handlers
+ipcMain.handle('project:list-files', async (_event, dirPath: string) => {
+  try {
+    const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+    const files = entries.map((entry) => ({
+      name: entry.name,
+      path: path.join(dirPath, entry.name),
+      isDirectory: entry.isDirectory(),
+    })).sort((a, b) => {
+      if (a.isDirectory === b.isDirectory) {
+        return a.name.localeCompare(b.name);
+      }
+      return a.isDirectory ? -1 : 1;
+    });
+    return { success: true, files };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('project:read-file', async (_event, filePath: string) => {
+  try {
+    const content = await fs.promises.readFile(filePath, 'utf-8');
+    return { success: true, content };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
+
+// Git IPC handlers
+const execFileAsync = promisify(execFile);
+
+async function runGit(cwd: string, args: string[]): Promise<string> {
+  const result = await execFileAsync('git', args, {
+    cwd,
+    windowsHide: true,
+    encoding: 'utf-8',
+  });
+  return result.stdout as string;
+}
+
+ipcMain.handle('git:status', async (_event, cwd: string) => {
+  try {
+    const stdout = await runGit(cwd, ['status', '--porcelain']);
+    const lines = stdout.trim().split('\n').filter(Boolean);
+    interface GitStatusEntry { path: string; indexStatus: string; worktreeStatus: string; }
+    const entries: GitStatusEntry[] = lines.map(line => {
+      const indexStatus = line[0] || ' ';
+      const worktreeStatus = line[1] || ' ';
+      const filePath = line.substring(3);
+      const arrowIdx = filePath.indexOf(' -> ');
+      const finalPath = arrowIdx > 0 ? filePath.substring(arrowIdx + 4) : filePath;
+      return { path: finalPath, indexStatus, worktreeStatus };
+    });
+    return { success: true, entries };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('git:branch', async (_event, cwd: string) => {
+  try {
+    const stdout = await runGit(cwd, ['branch', '--show-current']);
+    return { success: true, branch: stdout.trim() || null };
+  } catch (_err: any) {
+    try {
+      const fallback = await runGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);
+      return { success: true, branch: fallback.trim() || null };
+    } catch (err2: any) {
+      return { success: false, error: err2.message };
+    }
+  }
+});
+
+ipcMain.handle('git:log', async (_event, cwd: string, count: number = 50) => {
+  try {
+    const stdout = await runGit(cwd, ['log', '--format=%H|%s|%an|%ad', '--date=short', `-n${count}`]);
+    const lines = stdout.trim().split('\n').filter(Boolean);
+    const commits = lines.map(line => {
+      const [hash, message, author, date] = line.split('|');
+      return { hash, shortHash: hash.substring(0, 7), message, author, date };
+    });
+    return { success: true, commits };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('git:show', async (_event, cwd: string, hash: string) => {
+  try {
+    const statOut = await runGit(cwd, ['show', '--stat', '--format=%H|%s|%an|%ae|%ad', '--date=short', '-s', hash]);
+    const [infoLine] = statOut.trim().split('\n');
+    const [h, message, author, email, date] = infoLine.split('|');
+    const diff = await runGit(cwd, ['show', hash]);
+    return {
+      success: true,
+      commit: { hash: h, shortHash: h.substring(0, 7), message, author, email, date },
+      diff: diff.trim(),
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('git:diff', async (_event, cwd: string, filePath: string, staged: boolean = false) => {
+  try {
+    const args = staged ? ['diff', '--staged', '--', filePath] : ['diff', '--', filePath];
+    const stdout = await runGit(cwd, args);
+    return { success: true, diff: stdout };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('git:version', async () => {
+  try {
+    const stdout = await runGit(process.cwd(), ['--version']);
+    return { success: true, version: stdout.trim() };
   } catch (err: any) {
     return { success: false, error: err.message };
   }

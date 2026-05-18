@@ -55,6 +55,21 @@ declare global {
         clearContext: (sessionId: string) => Promise<{ success: boolean; error?: string }>;
         onStatus: (requestId: string, callback: (event: { status: string; detail: string }) => void) => () => void;
       };
+      dialog: {
+        openFolder: () => Promise<{ success: boolean; canceled?: boolean; filePaths?: string[]; error?: string }>;
+      };
+      project: {
+        listFiles: (dirPath: string) => Promise<{ success: boolean; files?: any[]; error?: string }>;
+        readFile: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
+      };
+      git: {
+        status: (cwd: string) => Promise<{ success: boolean; entries?: { path: string; indexStatus: string; worktreeStatus: string }[]; error?: string }>;
+        branch: (cwd: string) => Promise<{ success: boolean; branch?: string | null; error?: string }>;
+        log: (cwd: string, count?: number) => Promise<{ success: boolean; commits?: any[]; error?: string }>;
+        show: (cwd: string, hash: string) => Promise<{ success: boolean; commit?: any; diff?: string; error?: string }>;
+        diff: (cwd: string, filePath: string, staged?: boolean) => Promise<{ success: boolean; diff?: string; error?: string }>;
+        version: () => Promise<{ success: boolean; version?: string; error?: string }>;
+      };
     };
   }
 }
@@ -67,6 +82,11 @@ export interface Connection {
   username: string;
   password?: string;
   privateKey?: string;
+}
+
+export interface Project {
+  path: string;
+  name: string;
 }
 
 export interface Tab {
@@ -253,6 +273,22 @@ export function App(): React.ReactElement {
       return [];
     }
   });
+  const [projects, setProjects] = useState<Project[]>(() => {
+    try {
+      const saved = localStorage.getItem('xlterm-projects');
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const [activeProjectPath, setActiveProjectPath] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('xlterm-active-project');
+    } catch {
+      return null;
+    }
+  });
 
   // Sync theme with OS
   useEffect(() => {
@@ -365,6 +401,42 @@ export function App(): React.ReactElement {
     setSettings(prev => ({ ...prev, ...patch }));
   }, []);
 
+  const handleOpenProject = useCallback(async () => {
+    const result = await window.electronAPI.dialog.openFolder();
+    if (result.success && !result.canceled && result.filePaths && result.filePaths.length > 0) {
+      const newPath = result.filePaths[0];
+      const name = newPath.split(/[\\/]/).pop() || newPath;
+      setProjects(prev => {
+        if (prev.some(p => p.path === newPath)) {
+          return prev;
+        }
+        const updated = [...prev, { path: newPath, name }];
+        localStorage.setItem('xlterm-projects', JSON.stringify(updated));
+        return updated;
+      });
+      setActiveProjectPath(newPath);
+      localStorage.setItem('xlterm-active-project', newPath);
+    }
+  }, []);
+
+  const handleDeleteProject = useCallback((projectPath: string) => {
+    setProjects(prev => {
+      const updated = prev.filter(p => p.path !== projectPath);
+      localStorage.setItem('xlterm-projects', JSON.stringify(updated));
+      return updated;
+    });
+    if (activeProjectPath === projectPath) {
+      const remaining = projects.filter(p => p.path !== projectPath);
+      const nextPath = remaining.length > 0 ? remaining[remaining.length - 1].path : null;
+      setActiveProjectPath(nextPath);
+      if (nextPath) {
+        localStorage.setItem('xlterm-active-project', nextPath);
+      } else {
+        localStorage.removeItem('xlterm-active-project');
+      }
+    }
+  }, [activeProjectPath, projects]);
+
   return (
     <>
       <TitleBar
@@ -372,23 +444,30 @@ export function App(): React.ReactElement {
         onToggleMode={() => setMode(prev => prev === 'ssh' ? 'code' : 'ssh')}
         onOpenSettings={() => setShowSettings(true)}
       />
-      <Sidebar
-        mode={mode}
-        visible={sidebarVisible}
-        onToggleVisible={() => setSidebarVisible(prev => !prev)}
-        connections={savedConnections}
-        activeId={activeTabId}
-        theme={theme}
-        onToggleTheme={handleToggleTheme}
-        onConnect={handleConnect}
-        onNew={() => { setEditingConnection(null); setShowDialog(true); }}
-        onSelect={(id) => setActiveTabId(id)}
-        onDelete={handleDeleteConnection}
-        onEdit={handleEditConnection}
-      />
+      {mode !== 'code' && (
+        <Sidebar
+          mode={mode}
+          visible={sidebarVisible}
+          onToggleVisible={() => setSidebarVisible(prev => !prev)}
+          connections={savedConnections}
+          activeId={activeTabId}
+          theme={theme}
+          onToggleTheme={handleToggleTheme}
+          onConnect={handleConnect}
+          onNew={() => { setEditingConnection(null); setShowDialog(true); }}
+          onSelect={(id) => setActiveTabId(id)}
+          onDelete={handleDeleteConnection}
+          onEdit={handleEditConnection}
+          projects={projects}
+          activeProjectPath={activeProjectPath}
+          onOpenProject={handleOpenProject}
+          onSelectProject={setActiveProjectPath}
+          onDeleteProject={handleDeleteProject}
+        />
+      )}
       <main className="main-area">
         {mode === 'code' ? (
-          <VibeCode />
+          <VibeCode activeProjectPath={activeProjectPath} onOpenProject={handleOpenProject} />
         ) : activeTab ? (
           <Terminal
             tabs={tabs}

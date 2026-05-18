@@ -73,4 +73,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener(channel, listener);
     },
   },
+  dialog: {
+    openFolder: () => ipcRenderer.invoke('dialog:open-folder'),
+  },
+  project: {
+    listFiles: (dirPath: string) => ipcRenderer.invoke('project:list-files', dirPath),
+    readFile: (filePath: string) => ipcRenderer.invoke('project:read-file', filePath),
+  },
+  git: {
+    status: (cwd: string) => ipcRenderer.invoke('git:status', cwd),
+    branch: (cwd: string) => ipcRenderer.invoke('git:branch', cwd),
+    log: (cwd: string, count?: number) => ipcRenderer.invoke('git:log', cwd, count),
+    show: (cwd: string, hash: string) => ipcRenderer.invoke('git:show', cwd, hash),
+    diff: (cwd: string, filePath: string, staged?: boolean) => ipcRenderer.invoke('git:diff', cwd, filePath, staged),
+    version: () => ipcRenderer.invoke('git:version'),
+  },
 });
